@@ -193,6 +193,25 @@ const renderMain = (data: DashboardData) =>
         ),
     );
 
+// Transitions an element from its old height to its new one; its CSS supplies the height transition
+const animateHeight = (element: HTMLElement, from: number) => {
+    const to = element.scrollHeight;
+    if (from === 0 || from === to || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        return;
+    }
+    element.style.height = `${from}px`;
+    void element.offsetHeight; // commit the start height before transitioning
+    element.style.height = `${to}px`;
+    const done = (e: TransitionEvent) => {
+        if (e.target !== element) {
+            return;
+        }
+        element.style.height = "";
+        element.removeEventListener("transitionend", done);
+    };
+    element.addEventListener("transitionend", done);
+};
+
 const show = (requested: string, animate = false) => {
     const panels = document.querySelector<HTMLElement>(".panels");
     if (!panels) {
@@ -206,24 +225,9 @@ const show = (requested: string, animate = false) => {
     });
     document.querySelectorAll<HTMLElement>(".tile[data-tab]").forEach((t) => t.classList.toggle("on", t.dataset.tab === key));
     history.replaceState(null, "", `#${key}`);
-    if (!animate || from === 0 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        return;
+    if (animate) {
+        animateHeight(panels, from);
     }
-    const to = panels.scrollHeight;
-    if (from === to) {
-        return;
-    }
-    panels.style.height = `${from}px`;
-    void panels.offsetHeight; // commit the start height before transitioning
-    panels.style.height = `${to}px`;
-    const done = (e: TransitionEvent) => {
-        if (e.target !== panels) {
-            return;
-        }
-        panels.style.height = "";
-        panels.removeEventListener("transitionend", done);
-    };
-    panels.addEventListener("transitionend", done);
 };
 
 const tileCounts = () =>
@@ -298,7 +302,14 @@ document.addEventListener("click", (e) => {
         } catch {
             // the choice just won't survive a reload
         }
-        draw(lastData);
+        // Swap only the stats so the tiles above don't replay their animations
+        const current = document.querySelector<HTMLElement>(".stats");
+        const next = statsPanel(lastData.repo, lastData.stats);
+        if (current && next) {
+            const from = current.offsetHeight;
+            current.replaceWith(next);
+            animateHeight(next, from);
+        }
     }
 });
 
