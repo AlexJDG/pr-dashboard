@@ -44,7 +44,7 @@ h1 { font-size: 1.1rem; font-weight: 700; margin: 0 0 1.5rem; letter-spacing: .0
 .cursor { color: var(--green); animation: blink 1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: .75rem; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .75rem; }
 .tile {
     font: inherit; color: inherit; text-align: left; cursor: pointer; padding: .9rem;
     background: var(--panel); backdrop-filter: blur(6px);
