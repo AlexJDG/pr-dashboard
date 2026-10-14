@@ -47,7 +47,6 @@ query($q: String!) {
 }`;
 
 const STATS_WINDOW_DAYS = [1, 7, 28];
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const CHART_DAYS = 14;
 const STATS_REFRESH_SECONDS = 300;
 const STATS_QUERY = `
@@ -189,8 +188,9 @@ const clockTime = (date: Date) => `${pad2(date.getHours())}:${pad2(date.getMinut
 // GitHub search accepts whole-second UTC timestamps, which also compare correctly as strings against its own
 const searchTimestamp = (date: Date) => `${date.toISOString().slice(0, 19)}Z`;
 
+// Calendar days including today, so the 1 day window matches today's point on the chart
 const windowStats = (prs: StatsPr[], days: number, now: Date): StatsWindow => {
-    const since = searchTimestamp(new Date(now.getTime() - days * MS_PER_DAY));
+    const since = searchTimestamp(new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1)));
     const reviewed = new Map<string, Set<number>>();
     for (const pr of prs) {
         for (const review of pr.reviews.nodes) {

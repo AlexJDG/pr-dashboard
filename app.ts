@@ -125,7 +125,7 @@ const statsPanel = (repo: string, stats: Stats | null) => {
     if (!selected) {
         return null;
     }
-    const period = selected.days === 1 ? "last 24 hours" : `last ${selected.days} days`;
+    const period = selected.days === 1 ? "today" : `last ${selected.days} days`;
     const top = Math.max(1, ...selected.reviews.map((review) => review.count));
     const bars = selected.reviews.map(({ login, count }) =>
         h(
