@@ -18,8 +18,19 @@ const FULL_TURN = Math.PI * 2;
 
 const motionReduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+// Measures the number's text rather than its block, which spans the whole tile
+const countRect = () => {
+    const count = document.querySelector(".tile.stat .big");
+    if (!count) {
+        return null;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(count);
+    return range.getBoundingClientRect();
+};
+
 const burstOrigin = () => {
-    const rect = document.querySelector(".tile.stat")?.getBoundingClientRect();
+    const rect = countRect();
     if (!rect || rect.bottom < 0 || rect.top > innerHeight) {
         return { x: innerWidth / 2, y: innerHeight / 2 };
     }
