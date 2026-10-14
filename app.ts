@@ -271,6 +271,9 @@ const tileCounts = () =>
 
 const draw = (data: DashboardData) => {
     const previous = tileCounts();
+    const heightOf = (selector: string) => document.querySelector<HTMLElement>(selector)?.offsetHeight ?? 0;
+    const panelsFrom = heightOf(".panels");
+    const statsFrom = heightOf(".stats-grid");
     const main = renderMain(data);
     document.querySelector("main")?.replaceWith(main);
     main.querySelectorAll<HTMLElement>(".tile[data-tab]").forEach((t) => {
@@ -280,6 +283,19 @@ const draw = (data: DashboardData) => {
         }
     });
     show(location.hash.slice(1), !hasRendered);
+    // Rows or reviewers coming and going resize these, so ease them to their new height
+    if (hasRendered) {
+        const resized: [string, number][] = [
+            [".panels", panelsFrom],
+            [".stats-grid", statsFrom],
+        ];
+        resized.forEach(([selector, from]) => {
+            const element = main.querySelector<HTMLElement>(selector);
+            if (element) {
+                animateHeight(element, from);
+            }
+        });
+    }
     hasRendered = true;
 };
 
