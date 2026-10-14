@@ -33,7 +33,7 @@ query($q: String!) {
   viewer { login }
   search(query: $q, type: ISSUE, first: 100) {
     nodes { ... on PullRequest {
-      number title url createdAt updatedAt additions deletions mergeStateStatus mergeable reviewDecision author { login }
+      number title url createdAt updatedAt additions deletions mergeable reviewDecision author { login }
       reviewThreads(first: 100) { nodes { isResolved } }
       labels(first: 10) { nodes { name color } }
       commits(last: 1) { nodes { commit {
@@ -122,12 +122,12 @@ def table(prs_, kodiak=False):
         f'<td><a href="{html.escape(p["url"])}" target=_blank rel=noopener>#{p["number"]}</a></td>'
         f'<td>{html.escape(p["title"])}{"".join(map(pill, p["labels"]))}{unresolved_badge(p)}</td>'
         f'<td class=diff><span class=add>+{p["additions"]:,}</span> <span class=del>-{p["deletions"]:,}</span></td>'
-        f'<td>{html.escape(p["author"]["login"])}</td>{age_cell(p)}<td>{html.escape(p["mergeStateStatus"].lower())}</td>'
+        f'<td>{html.escape(p["author"]["login"])}</td>{age_cell(p)}'
         + (f'<td>{html.escape(p["kodiak"])}</td>' if kodiak else "") + "</tr>"
         for p in prs_
-    ) or f"<tr><td colspan={7 if kodiak else 6} class=muted>None</td></tr>"
+    ) or f"<tr><td colspan={6 if kodiak else 5} class=muted>None</td></tr>"
     return (
-        "<table><thead><tr><th>PR</th><th>Title</th><th>Lines</th><th>Author</th><th>Opened / updated</th><th>Merge state</th>"
+        "<table><thead><tr><th>PR</th><th>Title</th><th>Lines</th><th>Author</th><th>Opened / updated</th>"
         + ("<th>Kodiak</th>" if kodiak else "") + f"</tr></thead>{rows}</table>"
     )
 
