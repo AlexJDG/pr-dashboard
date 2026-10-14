@@ -196,7 +196,7 @@ details table { margin-top: .5rem; }
     from { transform: translate(-50%, -50%) scale(.1); opacity: 1; }
     to { transform: translate(-50%, -50%) scale(16); opacity: 0; }
 }
-.shard { position: absolute; font-size: 24px; font-weight: 800; animation: shard 1.2s ease-out both; }
+.shard { position: absolute; font-weight: 800; animation: shard 1.2s ease-out both; }
 .shard.cyan { color: var(--cyan); text-shadow: 0 0 8px var(--cyan); }
 .shard.magenta { color: var(--magenta); text-shadow: 0 0 8px var(--magenta); }
 @keyframes shard {
