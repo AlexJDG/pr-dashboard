@@ -312,6 +312,7 @@ h1 { font-size: 1.1rem; font-weight: 700; margin: 0 0 1.5rem; letter-spacing: .0
     100% { transform: none; }
 }
 
+.panels { overflow: hidden; transition: height .3s cubic-bezier(.2, .8, .2, 1); }
 h2 { font-size: 1rem; margin: 2rem 0 .75rem; color: var(--fg); }
 h2::before { content: "// "; color: var(--muted); }
 .gh { font-size: 12px; font-weight: 400; margin-left: .5rem; }
@@ -516,7 +517,7 @@ def render():
 <header><h1><span class=prompt>&gt;</span> {REPO}<span class=dim>/pulls</span><span class=cursor>_</span></h1></header>
 <div class=tiles>{tiles}</div>
 {f'<pre class=err>{html.escape(error)}</pre>' if error else ''}
-{panels}
+<div class=panels>{panels}</div>
 {stats_panel()}
 <footer class=muted>{
     f"[gh api] {rate['remaining']:,}/{rate['limit']:,} left &middot; resets {reset_time():%H:%M} &middot; cost {rate['cost']}/refresh"
@@ -527,12 +528,26 @@ def render():
 <script>
 const show = (key, animate = false) => {{
     if (!document.getElementById(key)) key = "queue";
+    const panels = document.querySelector(".panels");
+    const from = panels.offsetHeight;
     document.querySelectorAll("section").forEach(s => {{
         s.hidden = s.id !== key;
         s.classList.toggle("enter", animate && s.id === key);
     }});
     document.querySelectorAll(".tile").forEach(t => t.classList.toggle("on", t.dataset.tab === key));
     history.replaceState(null, "", "#" + key);
+    if (!animate || from === 0) return;
+    const to = panels.scrollHeight;
+    if (from === to) return;
+    panels.style.height = from + "px";
+    panels.offsetHeight; // commit the start height before transitioning
+    panels.style.height = to + "px";
+    const done = e => {{
+        if (e.target !== panels) return;
+        panels.style.height = "";
+        panels.removeEventListener("transitionend", done);
+    }};
+    panels.addEventListener("transitionend", done);
 }};
 document.addEventListener("click", e => {{
     const tile = e.target.closest(".tile");
