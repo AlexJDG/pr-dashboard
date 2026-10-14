@@ -364,7 +364,7 @@ const buildTabs = (): Tab[] => {
 const CLIENT_FILES = new Map([
     ["/", { file: "index.html", type: "text/html; charset=utf-8", strip: false }],
     ["/style.css", { file: "style.css", type: "text/css; charset=utf-8", strip: false }],
-    ...["app.ts", "chart.ts", "dom.ts", "format.ts", "types.ts"].map(
+    ...["app.ts", "bg.ts", "chart.ts", "dom.ts", "format.ts", "types.ts"].map(
         (file) => [`/${file}`, { file, type: "text/javascript; charset=utf-8", strip: true }] as const,
     ),
 ]);
