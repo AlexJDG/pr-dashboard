@@ -30,7 +30,7 @@ body::after {
     animation-duration: 37s; animation-direction: alternate-reverse;
 }
 @keyframes drift { to { transform: translate(20vw, 25vh) scale(1.25); } }
-.rain { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .3; }
+.rain { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .12; }
 .floor { position: absolute; left: 0; bottom: 0; width: 100%; height: 40vh; }
 .beam {
     position: absolute; left: 0; right: 0; top: -160px; height: 160px;
