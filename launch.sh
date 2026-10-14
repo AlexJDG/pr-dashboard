@@ -11,6 +11,14 @@ RESTART_EXIT_CODE=75
 
 cd "$(dirname "$0")"
 
+# The shortcut runs a non-interactive shell, which skips nvm in ~/.bashrc and would find the system Node
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+  set +u
+  . "$HOME/.nvm/nvm.sh"
+  nvm use --silent
+  set -u
+fi
+
 if curl -sf "$URL/version" >/dev/null; then
   "$CHROME" --profile-directory="$PROFILE" --app="$URL"
   exit
