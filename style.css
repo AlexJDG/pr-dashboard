@@ -185,7 +185,7 @@ details table { margin-top: .5rem; }
     animation: spin .7s linear infinite;
 }
 
-.fx-layer { position: fixed; inset: 0; z-index: 12; overflow: hidden; pointer-events: none; }
+.fx-layer { position: fixed; inset: 0; z-index: 12; overflow: hidden; pointer-events: none; filter: url(#pixelate); }
 .ring {
     position: absolute; width: 60px; height: 60px; border-radius: 50%;
     border: 1px solid var(--cyan); box-shadow: 0 0 16px var(--cyan), inset 0 0 16px var(--cyan);
@@ -196,7 +196,7 @@ details table { margin-top: .5rem; }
     from { transform: translate(-50%, -50%) scale(.1); opacity: 1; }
     to { transform: translate(-50%, -50%) scale(16); opacity: 0; }
 }
-.shard { position: absolute; font-weight: 800; animation: shard 1.2s ease-out backwards; }
+.shard { position: absolute; font-size: 24px; font-weight: 800; animation: shard 1.2s ease-out backwards; }
 .shard.cyan { color: var(--cyan); text-shadow: 0 0 8px var(--cyan); }
 .shard.magenta { color: var(--magenta); text-shadow: 0 0 8px var(--magenta); }
 @keyframes shard {

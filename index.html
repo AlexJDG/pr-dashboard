@@ -14,5 +14,15 @@
     <div class="bg" aria-hidden="true"><canvas class="rain"></canvas><canvas class="floor"></canvas><div class="beam"></div></div>
     <main></main>
     <div class="pie" role="status"></div>
+    <!-- Samples one pixel per 6px block and grows it to fill the block -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+        <filter id="pixelate" x="0" y="0" width="100%" height="100%">
+            <feFlood x="3" y="3" width="1" height="1"/>
+            <feComposite width="6" height="6"/>
+            <feTile result="grid"/>
+            <feComposite in="SourceGraphic" in2="grid" operator="in"/>
+            <feMorphology operator="dilate" radius="3"/>
+        </filter>
+    </svg>
 </body>
 </html>
