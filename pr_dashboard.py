@@ -33,6 +33,7 @@ query($q: String!) {
   search(query: $q, type: ISSUE, first: 100) {
     nodes { ... on PullRequest {
       number title url createdAt mergeStateStatus mergeable reviewDecision author { login }
+      reviewThreads(first: 100) { nodes { isResolved } }
       labels(first: 10) { nodes { name color } }
       commits(last: 1) { nodes { commit {
         statusCheckRollup { state }
@@ -74,6 +75,7 @@ def open_prs():
             **p,
             "labels": p["labels"]["nodes"],
             "checks": (commit["statusCheckRollup"] or {}).get("state"),
+            "unresolved": sum(not t["isResolved"] for t in p.pop("reviewThreads")["nodes"]),
             "kodiak": kodiak_status(commit),
         })
     return prs_, result["rateLimit"]
@@ -92,11 +94,19 @@ def pill(label):
     return f' <span class=label style="background:#{color}33;border-color:#{color}">{html.escape(label["name"])}</span>'
 
 
+def failing(pr):
+    return pr["checks"] in ("FAILURE", "ERROR") or pr["unresolved"] > 0
+
+
+def unresolved_badge(pr):
+    return f" <span class=unresolved>{pr['unresolved']} unresolved</span>" if pr["unresolved"] else ""
+
+
 def table(prs_, kodiak=False):
     rows = "".join(
         f'<tr data-href="{html.escape(p["url"])}"{" class=blocked" if kodiak and blocked(p) else ""}>'
         f'<td><a href="{html.escape(p["url"])}" target=_blank rel=noopener>#{p["number"]}</a></td>'
-        f'<td>{html.escape(p["title"])}{"".join(map(pill, p["labels"]))}</td>'
+        f'<td>{html.escape(p["title"])}{"".join(map(pill, p["labels"]))}{unresolved_badge(p)}</td>'
         f'<td>{html.escape(p["author"]["login"])}</td><td>{html.escape(p["mergeStateStatus"].lower())}</td>'
         + (f'<td>{html.escape(p["kodiak"])}</td>' if kodiak else "") + "</tr>"
         for p in prs_
@@ -152,8 +162,9 @@ def fetch():
         automerge = [p for p in prs_ if has_label(p, "automerge") and not has_label(p, "stacked")]
         data = (
             prs_,
-            [p for p in prs_ if p["checks"] in ("FAILURE", "ERROR")],
-            [p for p in prs_ if p["reviewDecision"] not in ("APPROVED", "CHANGES_REQUESTED") and p["checks"] not in ("FAILURE", "ERROR") and p["mergeable"] != "CONFLICTING"],
+            # main requires review threads resolved before merging, so unresolved comments block like a failing check
+            [p for p in prs_ if failing(p)],
+            [p for p in prs_ if p["reviewDecision"] not in ("APPROVED", "CHANGES_REQUESTED") and not failing(p) and p["mergeable"] != "CONFLICTING"],
             # queued first, then mirrors Kodiak's ordering: hotfix first, then oldest
             sorted(automerge, key=lambda p: (blocked(p), not has_label(p, "hotfix"), p["createdAt"])),
         )
@@ -197,7 +208,7 @@ table{{width:100%;border-collapse:collapse}} td,th{{padding:.5rem;border-bottom:
 background:conic-gradient(var(--accent) var(--p),var(--line) 0);animation:fill {REFRESH_SECONDS}s linear forwards}}
 .loading .pie{{background:none;border:3px solid var(--line);border-top-color:var(--accent);box-sizing:border-box;animation:spin .8s linear infinite}}
 tr.blocked{{opacity:.55}} tr[data-href]{{cursor:pointer}} tr[data-href]:hover{{background:var(--line)}}
-a{{color:var(--accent)}} .label{{display:inline-block;font-size:12px;padding:0 .5em;border:1px solid;border-radius:1em;white-space:nowrap}} .gh{{font-size:.6em;font-weight:400}}
+a{{color:var(--accent)}} .unresolved{{font-size:12px;color:var(--hot);white-space:nowrap}} .label{{display:inline-block;font-size:12px;padding:0 .5em;border:1px solid;border-radius:1em;white-space:nowrap}} .gh{{font-size:.6em;font-weight:400}}
 </style>
 <main data-version="{VERSION}">
 <div class=tiles>{tiles}</div>
