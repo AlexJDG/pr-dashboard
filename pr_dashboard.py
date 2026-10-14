@@ -30,6 +30,7 @@ KODIAK_APP_ID = 29196
 QUERY = """
 query($q: String!) {
   rateLimit { cost limit remaining resetAt }
+  viewer { login }
   search(query: $q, type: ISSUE, first: 100) {
     nodes { ... on PullRequest {
       number title url createdAt mergeStateStatus mergeable reviewDecision author { login }
@@ -78,14 +79,14 @@ def open_prs():
             "unresolved": sum(not t["isResolved"] for t in p.pop("reviewThreads")["nodes"]),
             "kodiak": kodiak_status(commit),
         })
-    return prs_, result["rateLimit"]
+    return prs_, result["rateLimit"], result["viewer"]["login"]
 
 
 BASE = "is:open draft:false"
 FAILING = f"{BASE} status:failure"
 # GitHub leaves reviewDecision blank on some PRs that still need an approval, so exclude the decided ones
 # rather than matching review:required; -status:failure so PRs with checks still running count
-NEEDS_REVIEW = f"{BASE} -review:approved -review:changes_requested -status:failure"
+NEEDS_REVIEW = f"{BASE} -author:@me -review:approved -review:changes_requested -status:failure"
 QUEUE = f"{BASE} label:automerge -label:stacked"
 
 
@@ -142,7 +143,7 @@ def fetch():
             return
         next_fetch = time.time() + REFRESH_SECONDS - 1
         try:
-            prs_, rate = open_prs()
+            prs_, rate, me = open_prs()
         except subprocess.CalledProcessError as e:
             error = e.stderr
             if "rate limit" in e.stderr:
@@ -164,7 +165,13 @@ def fetch():
             prs_,
             # main requires review threads resolved before merging, so unresolved comments block like a failing check
             [p for p in prs_ if failing(p)],
-            [p for p in prs_ if p["reviewDecision"] not in ("APPROVED", "CHANGES_REQUESTED") and not failing(p) and p["mergeable"] != "CONFLICTING"],
+            [
+                p for p in prs_
+                if p["author"]["login"] != me
+                and p["reviewDecision"] not in ("APPROVED", "CHANGES_REQUESTED")
+                and not failing(p)
+                and p["mergeable"] != "CONFLICTING"
+            ],
             # queued first, then mirrors Kodiak's ordering: hotfix first, then oldest
             sorted(automerge, key=lambda p: (blocked(p), not has_label(p, "hotfix"), p["createdAt"])),
         )
