@@ -23,7 +23,7 @@ export const ago = (iso: string) => {
     return unit ? `${Math.floor(seconds / unit[1])}${unit[0]}` : "now";
 };
 
-// The two largest non-zero units, e.g. "2d 4h", "5h 12m", "45m"
+// The largest unit and the one below it, leaving out a zero second unit: "2d 4h", "5h 12m", "45m", "1d"
 export const compactDuration = (ms: number) => {
     let remaining = Math.floor(ms / MS_PER_MINUTE);
     const first = DURATION_UNITS.findIndex(([, size]) => remaining >= size);

@@ -2,7 +2,8 @@ import { startBoot } from "./boot.ts";
 import { CHART_W, lineChart } from "./chart.ts";
 import { h } from "./dom.ts";
 import { ago, clockTime, compactDuration, quotePlus } from "./format.ts";
-import { celebrateMerge } from "./fx.ts";
+import { celebrateMerges } from "./fx.ts";
+import { mountFxMenu } from "./fxmenu.ts";
 import type { DashboardData, Label, PrRow, Stats, Tab } from "./types.ts";
 
 const MS_PER_SECOND = 1000;
@@ -25,6 +26,7 @@ let hasRendered = false;
 let refreshSeconds = DEFAULT_REFRESH_SECONDS;
 let lastData: DashboardData | null = null;
 let seenMerges: Set<number> | null = null;
+let latestMergedAt = "";
 const provideBootData = startBoot();
 
 const storedStatsDays = () => {
@@ -135,20 +137,23 @@ const statsPanel = (repo: string, stats: Stats | null) => {
     const period = selected.days === 1 ? "today" : `last ${selected.days} days`;
     const top = Math.max(1, ...selected.reviews.map((review) => review.count));
     const bars = selected.reviews.map(({ login, count }) => {
-        const streak = stats.streaks[login] ?? 0;
-        const hasStreak = streak >= MIN_STREAK_DAYS;
+        const isTop = count === selected.reviews[0]?.count;
+        const leaderDays = isTop ? (selected.leaderStreaks[login] ?? 0) : 0;
+        const hasStreak = leaderDays >= MIN_STREAK_DAYS;
+        const leaderNote = `top reviewer for ${leaderDays} working days running`;
         return h(
             "div",
             {
                 class: "bar-row",
-                title: `${login} reviewed ${count} PR${count === 1 ? "" : "s"} in the ${period}${hasStreak ? `, ${streak} working day review streak` : ""}`,
+                title: `${login} reviewed ${count} PR${count === 1 ? "" : "s"} in the ${period}${hasStreak ? `, ${leaderNote}` : ""}`,
             },
             h(
                 "span",
                 { class: "bar-name" },
                 h("span", { class: "bar-login" }, login),
-                count === top ? h("span", { class: "crown", "aria-label": "Top reviewer" }, "♛") : null,
-                hasStreak ? h("span", { class: "streak" }, `⚡${streak}d`) : null,
+                isTop
+                    ? h("span", { class: "crown", role: "img", "aria-label": hasStreak ? `Top reviewer, ${leaderNote}` : "Top reviewer" }, hasStreak ? `♛ ${leaderDays}d` : "♛")
+                    : null,
             ),
             h("span", { class: "bar-track" }, h("span", { class: "bar", style: `width:${((count / top) * PERCENT).toFixed(1)}%` })),
             h("span", { class: "bar-value" }, `${count}`),
@@ -277,18 +282,24 @@ const draw = (data: DashboardData) => {
     hasRendered = true;
 };
 
-// The first loaded payload only seeds the seen set, so merges from before the page opened don't celebrate
+// The first loaded payload only seeds the cursor, so merges from before the page opened don't celebrate.
+// Only merges after the latest one seen count, since the list is ordered by last update, not merge time.
 const celebrateNewMerges = (data: DashboardData) => {
     if (!data.loaded) {
         return;
     }
-    const seen = seenMerges ?? new Set(data.recentMerges.map((pr) => pr.number));
-    const fresh = seenMerges ? data.recentMerges.filter((pr) => !seen.has(pr.number)) : [];
-    fresh.forEach((pr) => {
+    const seen = seenMerges ?? new Set<number>();
+    const fresh = seenMerges
+        ? data.recentMerges
+              .filter((pr) => pr.mergedAt > latestMergedAt || (pr.mergedAt === latestMergedAt && !seen.has(pr.number)))
+              .toSorted((a, b) => a.mergedAt.localeCompare(b.mergedAt))
+        : [];
+    data.recentMerges.forEach((pr) => {
         seen.add(pr.number);
-        celebrateMerge(pr);
+        latestMergedAt = pr.mergedAt > latestMergedAt ? pr.mergedAt : latestMergedAt;
     });
     seenMerges = seen;
+    celebrateMerges(fresh);
 };
 
 const restartPie = () => {
@@ -320,7 +331,7 @@ const refresh = async () => {
         lastData = data;
         draw(data);
         celebrateNewMerges(data);
-        provideBootData(data);
+        provideBootData(data.loaded ? data : null);
     } catch {
         provideBootData(null);
         // keep the current view and try again on the next tick
@@ -411,4 +422,5 @@ setInterval(
     VERSION_POLL_MS,
 );
 
+mountFxMenu(() => (lastData?.loaded ? lastData : null));
 void refresh();

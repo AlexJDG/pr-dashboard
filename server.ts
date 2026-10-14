@@ -8,6 +8,7 @@ import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
+import { type DatedReview, leaderStreaks, localDay } from "./leaders.ts";
 import type { DashboardData, Label, MergedPr, PrRow, RateInfo, Stats, StatsWindow, Tab } from "./types.ts";
 
 const REPO = "owner/repo";
@@ -52,6 +53,8 @@ query($q: String!, $mergedQ: String!) {
 
 const STATS_WINDOW_DAYS = [1, 7, 28];
 const CHART_DAYS = 14;
+// The longest window plus as many days again, so a leader streak on that window has history to draw on
+const STATS_FETCH_DAYS = 56;
 const STATS_REFRESH_SECONDS = 300;
 const STATS_QUERY = `
 query($q: String!, $after: String) {
@@ -73,8 +76,7 @@ const QUEUE = `${BASE} label:automerge -label:stacked`;
 // Stop polling until the hourly reset rather than drain the budget other gh tools share
 const MIN_RATE_REMAINING = 500;
 const GHOST_LOGIN = "ghost";
-const SUNDAY = 0;
-const SATURDAY = 6;
+
 const NO_KODIAK_STATUS = "no Kodiak status";
 
 type RawPr = {
@@ -204,8 +206,6 @@ const fetchRateLimit = async () => (await graphql<{ rateLimit: RateInfo }>("{ ra
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
-const localDay = (date: Date) => `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
-
 const clockTime = (date: Date) => `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 
 // GitHub search accepts whole-second UTC timestamps, which also compare correctly as strings against its own
@@ -226,46 +226,12 @@ const median = (values: number[]) => {
         return null;
     }
     const sorted = values.toSorted((a, b) => a - b);
-    const lower = sorted[Math.ceil(sorted.length / 2) - 1] ?? 0;
-    const upper = sorted[Math.floor(sorted.length / 2)] ?? 0;
-    return (lower + upper) / 2;
-};
-
-const isWeekend = (date: Date) => date.getDay() === SUNDAY || date.getDay() === SATURDAY;
-
-const previousWorkingDay = (date: Date): Date => {
-    const previous = new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1);
-    return isWeekend(previous) ? previousWorkingDay(previous) : previous;
-};
-
-// Consecutive working days with a review, ending today or the previous working day; weekends neither count nor break it
-const streakLength = (reviewDays: Set<string>, today: Date, oldest: Date) => {
-    const latest = isWeekend(today) ? previousWorkingDay(today) : today;
-    let day = reviewDays.has(localDay(latest)) ? latest : previousWorkingDay(latest);
-    let length = 0;
-    while (day >= oldest && reviewDays.has(localDay(day))) {
-        length++;
-        day = previousWorkingDay(day);
-    }
-    return length;
-};
-
-const reviewStreaks = (prs: StatsPr[], now: Date, fetchDays: number) => {
-    const reviewDays = new Map<string, Set<string>>();
-    prs.flatMap(countedReviews).forEach(({ login, submittedAt }) => {
-        reviewDays.set(login, (reviewDays.get(login) ?? new Set()).add(localDay(new Date(submittedAt))));
-    });
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const oldest = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (fetchDays - 1));
-    return Object.fromEntries(
-        [...reviewDays]
-            .map(([login, days]) => [login, streakLength(days, today, oldest)] as const)
-            .filter(([, length]) => length > 0),
-    );
+    const middle = sorted.slice(Math.ceil(sorted.length / 2) - 1, Math.floor(sorted.length / 2) + 1);
+    return middle.reduce((sum, value) => sum + value) / middle.length;
 };
 
 // Calendar days including today, so the 1 day window matches today's point on the chart
-const windowStats = (prs: StatsPr[], days: number, now: Date): StatsWindow => {
+const windowStats = (prs: StatsPr[], days: number, now: Date, datedReviews: DatedReview[]): StatsWindow => {
     const since = searchTimestamp(new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1)));
     const reviewed = new Map<string, Set<number>>();
     for (const pr of prs) {
@@ -275,15 +241,18 @@ const windowStats = (prs: StatsPr[], days: number, now: Date): StatsWindow => {
             }
         }
     }
-    const mergedInWindow = prs.filter((pr) => pr.mergedAt && pr.mergedAt >= since);
+    const mergeDurationsMs = prs.flatMap((pr) =>
+        pr.mergedAt && pr.mergedAt >= since ? [Date.parse(pr.mergedAt) - Date.parse(pr.createdAt)] : [],
+    );
     return {
         days,
-        merged: mergedInWindow.length,
-        medianMergeMs: median(mergedInWindow.map((pr) => Date.parse(pr.mergedAt ?? "") - Date.parse(pr.createdAt))),
+        merged: mergeDurationsMs.length,
+        medianMergeMs: median(mergeDurationsMs),
         mergedSearch: `repo:${REPO} is:pr is:merged merged:>=${since}`,
         reviews: [...reviewed]
             .map(([login, numbers]) => ({ login, count: numbers.size }))
             .sort((a, b) => b.count - a.count || compareStrings(a.login.toLowerCase(), b.login.toLowerCase())),
+        leaderStreaks: leaderStreaks(datedReviews, days, now, STATS_FETCH_DAYS),
     };
 };
 
@@ -291,8 +260,7 @@ const reviewStats = async (): Promise<Stats> => {
     const now = new Date();
     const dayOffset = (offset: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
     const days = Array.from({ length: CHART_DAYS }, (_, i) => localDay(dayOffset(i - (CHART_DAYS - 1))));
-    const fetchDays = Math.max(CHART_DAYS, ...STATS_WINDOW_DAYS);
-    const variables: Record<string, string> = { q: `repo:${REPO} is:pr updated:>=${localDay(dayOffset(-fetchDays))}` };
+        const variables: Record<string, string> = { q: `repo:${REPO} is:pr updated:>=${localDay(dayOffset(-STATS_FETCH_DAYS))}` };
     const prs: StatsPr[] = [];
     while (true) {
         const result = await graphql<StatsResult>(STATS_QUERY, variables);
@@ -302,11 +270,13 @@ const reviewStats = async (): Promise<Stats> => {
         }
         variables.after = result.search.pageInfo.endCursor;
     }
+    const datedReviews = prs.flatMap((pr) =>
+        countedReviews(pr).map(({ login, submittedAt }) => ({ login, prNumber: pr.number, day: localDay(new Date(submittedAt)) })),
+    );
     const tally = (dates: string[]) => days.map((day) => dates.filter((date) => date === day).length);
     return {
-        windows: STATS_WINDOW_DAYS.map((windowDays) => windowStats(prs, windowDays, now)),
+        windows: STATS_WINDOW_DAYS.map((windowDays) => windowStats(prs, windowDays, now, datedReviews)),
         days,
-        streaks: reviewStreaks(prs, now, fetchDays),
         series: [
             { name: "Opened", values: tally(prs.map((pr) => localDay(new Date(pr.createdAt)))) },
             { name: "Merged", values: tally(prs.flatMap((pr) => (pr.mergedAt ? [localDay(new Date(pr.mergedAt))] : []))) },
@@ -440,7 +410,7 @@ const buildTabs = (): Tab[] => {
 const CLIENT_FILES = new Map([
     ["/", { file: "index.html", type: "text/html; charset=utf-8", strip: false }],
     ["/style.css", { file: "style.css", type: "text/css; charset=utf-8", strip: false }],
-    ...["app.ts", "bg.ts", "boot.ts", "chart.ts", "dom.ts", "format.ts", "fx.ts", "glyphs.ts", "types.ts"].map(
+    ...["app.ts", "bg.ts", "boot.ts", "chart.ts", "dom.ts", "format.ts", "fx.ts", "fxmenu.ts", "glyphs.ts", "types.ts"].map(
         (file) => [`/${file}`, { file, type: "text/javascript; charset=utf-8", strip: true }] as const,
     ),
 ]);

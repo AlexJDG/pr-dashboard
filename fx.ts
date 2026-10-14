@@ -9,6 +9,7 @@ const SHARD_DELAY_MS = 120;
 const RING_STAGGER_MS = 140;
 const RING_COUNT = 2;
 const BURST_MS = 1600;
+const MAX_TOASTS = 3;
 const TOAST_MS = 6000;
 const TOAST_OUT_MS = 500;
 const TYPE_TICK_MS = 30;
@@ -58,6 +59,7 @@ const glitchType = (element: HTMLElement, text: string) => {
         }
         element.textContent = text.slice(0, revealed) + randomGlyph();
     }, TYPE_TICK_MS);
+    return timer;
 };
 
 const toastStack = () => {
@@ -65,33 +67,48 @@ const toastStack = () => {
     if (existing) {
         return existing;
     }
-    const created = h("div", { class: "toasts" });
+    const created = h("div", { class: "toasts", "aria-live": "polite" });
     document.body.append(created);
     return created;
 };
+
+const dismissers = new WeakMap<Element, () => void>();
 
 const showToast = (pr: MergedPr, animate: boolean) => {
     const head = h("b", { class: "toast-head" });
     const title = h("span", { class: "toast-title" });
     const toast = h("a", { class: "toast", href: pr.url, rel: "noopener" }, head, title);
     const heading = `▲ MERGED #${pr.number}`;
-    if (animate) {
-        glitchType(head, heading);
-        glitchType(title, pr.title);
-    } else {
+    const typing = animate ? [glitchType(head, heading), glitchType(title, pr.title)] : [];
+    if (!animate) {
         head.textContent = heading;
         title.textContent = pr.title;
     }
-    toastStack().append(toast);
-    setTimeout(() => toast.classList.add("out"), TOAST_MS);
-    setTimeout(() => toast.remove(), TOAST_MS + TOAST_OUT_MS);
+    const stack = toastStack();
+    const outTimer = setTimeout(() => toast.classList.add("out"), TOAST_MS);
+    const removeTimer = setTimeout(() => dismiss(), TOAST_MS + TOAST_OUT_MS);
+    const dismiss = () => {
+        typing.forEach(clearInterval);
+        clearTimeout(outTimer);
+        clearTimeout(removeTimer);
+        toast.remove();
+        if (!stack.hasChildNodes()) {
+            stack.remove();
+        }
+    };
+    dismissers.set(toast, dismiss);
+    stack.append(toast);
+    [...stack.children].slice(0, -MAX_TOASTS).forEach((oldest) => dismissers.get(oldest)?.());
 };
 
-export const celebrateMerge = (pr: MergedPr) => {
+// One burst and rain surge however many merges arrive together
+export const celebrateMerges = (prs: MergedPr[]) => {
     const animate = !motionReduced();
-    showToast(pr, animate);
-    if (animate) {
+    prs.forEach((pr) => showToast(pr, animate));
+    if (animate && prs.length > 0) {
         burst();
-        dispatchEvent(new CustomEvent("rain-surge"));
+        surgeRain();
     }
 };
+
+export const surgeRain = () => dispatchEvent(new CustomEvent("rain-surge"));

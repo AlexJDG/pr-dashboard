@@ -27,6 +27,7 @@ const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let drops: number[] = [];
 let lastRainStep = 0;
 let surgeUntil = 0;
+let surgeTimer: ReturnType<typeof setTimeout> | undefined;
 
 const fitToScreen = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
     const scale = devicePixelRatio;
@@ -109,7 +110,8 @@ addEventListener("rain-surge", () => {
     }
     surgeUntil = performance.now() + SURGE_MS;
     rain.classList.add("surge");
-    setTimeout(() => rain.classList.remove("surge"), SURGE_MS);
+    clearTimeout(surgeTimer);
+    surgeTimer = setTimeout(() => rain.classList.remove("surge"), SURGE_MS);
 });
 
 addEventListener("resize", resize);

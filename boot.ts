@@ -5,6 +5,7 @@ const BOOTED_KEY = "booted";
 const CHAR_MS = 8;
 const LINE_PAUSE_MS = 60;
 const HOLD_MS = 250;
+const FAILURE_HOLD_MS = 1200;
 const OUT_MS = 450;
 const DATA_WAIT_MS = 8000;
 
@@ -33,13 +34,13 @@ const dataLines = (data: DashboardData) => {
     ];
 };
 
-// Returns the function that hands over the first dashboard payload, or null if loading it failed
-export const startBoot = () => {
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches || !claimBoot()) {
+// Returns the function that hands over the first dashboard payload, or null if loading it failed. `replay` ignores the once-per-session limit.
+export const startBoot = (replay = false) => {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches || (!replay && !claimBoot())) {
         return () => {};
     }
     const output = h("pre", { class: "boot-output" });
-    const overlay = h("div", { class: "boot", role: "presentation" }, output);
+    const overlay = h("div", { class: "boot" }, output);
     document.body.append(overlay);
 
     let finished = false;
@@ -66,23 +67,25 @@ export const startBoot = () => {
         output.append(line);
         for (const char of text) {
             if (finished) {
-                return;
+                return line;
             }
             line.textContent += char;
             await sleep(CHAR_MS);
         }
         await sleep(LINE_PAUSE_MS);
+        return line;
     };
 
     void (async () => {
-        await typeLine("> establishing uplink to github.com... OK");
+        const uplink = await typeLine("> establishing uplink to github.com...");
         const data = await firstData;
+        uplink.textContent += data ? " OK" : " FAILED";
         if (data) {
             for (const line of dataLines(data)) {
                 await typeLine(line);
             }
-            await sleep(HOLD_MS);
         }
+        await sleep(data ? HOLD_MS : FAILURE_HOLD_MS);
         finish();
     })();
 
