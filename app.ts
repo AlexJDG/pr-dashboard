@@ -1,6 +1,8 @@
+import { startBoot } from "./boot.ts";
 import { CHART_W, lineChart } from "./chart.ts";
 import { h } from "./dom.ts";
-import { ago, clockTime, quotePlus } from "./format.ts";
+import { ago, clockTime, compactDuration, quotePlus } from "./format.ts";
+import { celebrateMerge } from "./fx.ts";
 import type { DashboardData, Label, PrRow, Stats, Tab } from "./types.ts";
 
 const MS_PER_SECOND = 1000;
@@ -14,12 +16,16 @@ const DEFAULT_REFRESH_SECONDS = 15;
 const DATA_TIMEOUT_MS = 60 * 1000;
 const DEFAULT_STATS_DAYS = 7;
 const STATS_DAYS_KEY = "statsDays";
+const MIN_STREAK_DAYS = 2;
+const NO_VALUE = "-";
 
 const pie = document.querySelector<HTMLElement>(".pie");
 const loadedVersion = document.querySelector<HTMLMetaElement>("meta[name=version]")?.content ?? null;
 let hasRendered = false;
 let refreshSeconds = DEFAULT_REFRESH_SECONDS;
 let lastData: DashboardData | null = null;
+let seenMerges: Set<number> | null = null;
+const provideBootData = startBoot();
 
 const storedStatsDays = () => {
     try {
@@ -128,15 +134,26 @@ const statsPanel = (repo: string, stats: Stats | null) => {
     }
     const period = selected.days === 1 ? "today" : `last ${selected.days} days`;
     const top = Math.max(1, ...selected.reviews.map((review) => review.count));
-    const bars = selected.reviews.map(({ login, count }) =>
-        h(
+    const bars = selected.reviews.map(({ login, count }) => {
+        const streak = stats.streaks[login] ?? 0;
+        const hasStreak = streak >= MIN_STREAK_DAYS;
+        return h(
             "div",
-            { class: "bar-row", title: `${login} reviewed ${count} PR${count === 1 ? "" : "s"} in the ${period}` },
-            h("span", { class: "bar-name" }, login),
+            {
+                class: "bar-row",
+                title: `${login} reviewed ${count} PR${count === 1 ? "" : "s"} in the ${period}${hasStreak ? `, ${streak} working day review streak` : ""}`,
+            },
+            h(
+                "span",
+                { class: "bar-name" },
+                h("span", { class: "bar-login" }, login),
+                count === top ? h("span", { class: "crown", "aria-label": "Top reviewer" }, "♛") : null,
+                hasStreak ? h("span", { class: "streak" }, `⚡${streak}d`) : null,
+            ),
             h("span", { class: "bar-track" }, h("span", { class: "bar", style: `width:${((count / top) * PERCENT).toFixed(1)}%` })),
             h("span", { class: "bar-value" }, `${count}`),
-        ),
-    );
+        );
+    });
     return h(
         "div",
         { class: "stats" },
@@ -156,10 +173,20 @@ const statsPanel = (repo: string, stats: Stats | null) => {
             "div",
             { class: "stats-grid" },
             h(
-                "a",
-                { class: "tile stat", href: githubSearchUrl(repo, selected.mergedSearch) },
-                h("span", { class: "tile-label" }, `Merged, ${period}`),
-                h("span", { class: "big" }, `${selected.merged}`),
+                "div",
+                { class: "stat-column" },
+                h(
+                    "a",
+                    { class: "tile stat", href: githubSearchUrl(repo, selected.mergedSearch) },
+                    h("span", { class: "tile-label" }, `Merged, ${period}`),
+                    h("span", { class: "big" }, `${selected.merged}`),
+                ),
+                h(
+                    "div",
+                    { class: "tile median" },
+                    h("span", { class: "tile-label" }, `Median time to merge, ${period}`),
+                    h("span", { class: "big" }, selected.medianMergeMs === null ? NO_VALUE : compactDuration(selected.medianMergeMs)),
+                ),
             ),
             h(
                 "div",
@@ -250,6 +277,20 @@ const draw = (data: DashboardData) => {
     hasRendered = true;
 };
 
+// The first loaded payload only seeds the seen set, so merges from before the page opened don't celebrate
+const celebrateNewMerges = (data: DashboardData) => {
+    if (!data.loaded) {
+        return;
+    }
+    const seen = seenMerges ?? new Set(data.recentMerges.map((pr) => pr.number));
+    const fresh = seenMerges ? data.recentMerges.filter((pr) => !seen.has(pr.number)) : [];
+    fresh.forEach((pr) => {
+        seen.add(pr.number);
+        celebrateMerge(pr);
+    });
+    seenMerges = seen;
+};
+
 const restartPie = () => {
     if (!pie) {
         return;
@@ -278,7 +319,10 @@ const refresh = async () => {
         }
         lastData = data;
         draw(data);
+        celebrateNewMerges(data);
+        provideBootData(data);
     } catch {
+        provideBootData(null);
         // keep the current view and try again on the next tick
     } finally {
         document.body.classList.remove("loading");

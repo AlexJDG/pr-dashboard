@@ -33,13 +33,17 @@ export type SeriesName = "Opened" | "Merged" | "Closed";
 export type StatsWindow = {
     days: number;
     merged: number;
+    medianMergeMs: number | null;
     mergedSearch: string;
     reviews: { login: string; count: number }[];
 };
 
+export type MergedPr = { number: number; title: string; url: string; mergedAt: string };
+
 export type Stats = {
     windows: StatsWindow[];
     days: string[];
+    streaks: Record<string, number>;
     series: { name: SeriesName; values: number[] }[];
 };
 
@@ -52,4 +56,6 @@ export type DashboardData = {
     error: string;
     rate: RateInfo | null;
     stats: Stats | null;
+    viewer: string;
+    recentMerges: MergedPr[];
 };

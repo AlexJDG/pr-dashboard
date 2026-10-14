@@ -8,7 +8,7 @@ import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import type { DashboardData, Label, PrRow, RateInfo, Stats, StatsWindow, Tab } from "./types.ts";
+import type { DashboardData, Label, MergedPr, PrRow, RateInfo, Stats, StatsWindow, Tab } from "./types.ts";
 
 const REPO = "owner/repo";
 const REFRESH_SECONDS = 15;
@@ -28,11 +28,15 @@ const MAX_BUFFER = 64 * 1024 * 1024;
 const GH_TIMEOUT_MS = 30 * 1000;
 
 const KODIAK_APP_ID = 29196;
+const RECENT_MERGES_LIMIT = 10;
 // First 100 open PRs only; paginate if the repo ever has more
 const QUERY = `
-query($q: String!) {
+query($q: String!, $mergedQ: String!) {
   rateLimit { cost limit remaining resetAt }
   viewer { login }
+  merged: search(query: $mergedQ, type: ISSUE, first: ${RECENT_MERGES_LIMIT}) {
+    nodes { ... on PullRequest { number title url mergedAt } }
+  }
   search(query: $q, type: ISSUE, first: 100) {
     nodes { ... on PullRequest {
       number title url createdAt updatedAt additions deletions mergeable reviewDecision author { login }
@@ -69,6 +73,8 @@ const QUEUE = `${BASE} label:automerge -label:stacked`;
 // Stop polling until the hourly reset rather than drain the budget other gh tools share
 const MIN_RATE_REMAINING = 500;
 const GHOST_LOGIN = "ghost";
+const SUNDAY = 0;
+const SATURDAY = 6;
 const NO_KODIAK_STATUS = "no Kodiak status";
 
 type RawPr = {
@@ -92,6 +98,13 @@ type RawPr = {
             };
         } | null)[];
     };
+};
+
+type OpenPrsResult = {
+    rateLimit: RateInfo;
+    viewer: { login: string };
+    search: { nodes: RawPr[] };
+    merged: { nodes: (MergedPr | null)[] };
 };
 
 type Pr = PrRow & { checks: string | undefined; mergeable: string; reviewDecision: string | null };
@@ -170,11 +183,21 @@ const toRow = ({ checks: _checks, mergeable: _mergeable, reviewDecision: _review
 
 const isPullRequest = (node: RawPr | null): node is RawPr => typeof node?.number === "number";
 
+const isMergedPr = (node: MergedPr | null): node is MergedPr => typeof node?.number === "number";
+
 const openPrs = async () => {
-    const result = await graphql<{ rateLimit: RateInfo; viewer: { login: string }; search: { nodes: RawPr[] } }>(QUERY, {
+    const now = new Date();
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const result = await graphql<OpenPrsResult>(QUERY, {
         q: `repo:${REPO} is:pr ${BASE}`,
+        mergedQ: `repo:${REPO} is:pr is:merged merged:>=${searchTimestamp(midnight)} sort:updated-desc`,
     });
-    return { prs: result.search.nodes.filter(isPullRequest).map(toPr), rate: result.rateLimit, me: result.viewer.login };
+    return {
+        prs: result.search.nodes.filter(isPullRequest).map(toPr),
+        merges: result.merged.nodes.filter(isMergedPr),
+        rate: result.rateLimit,
+        me: result.viewer.login,
+    };
 };
 
 const fetchRateLimit = async () => (await graphql<{ rateLimit: RateInfo }>("{ rateLimit { cost limit remaining resetAt } }")).rateLimit;
@@ -188,28 +211,75 @@ const clockTime = (date: Date) => `${pad2(date.getHours())}:${pad2(date.getMinut
 // GitHub search accepts whole-second UTC timestamps, which also compare correctly as strings against its own
 const searchTimestamp = (date: Date) => `${date.toISOString().slice(0, 19)}Z`;
 
+// People only, not bots or the PR author replying on their own PR
+const countedReviews = (pr: StatsPr) =>
+    pr.reviews.nodes.flatMap((review) => {
+        const reviewer = review?.author;
+        if (!review?.submittedAt || !reviewer || reviewer.__typename !== "User" || reviewer.login === pr.author?.login) {
+            return [];
+        }
+        return [{ login: reviewer.login, submittedAt: review.submittedAt }];
+    });
+
+const median = (values: number[]) => {
+    if (values.length === 0) {
+        return null;
+    }
+    const sorted = values.toSorted((a, b) => a - b);
+    const lower = sorted[Math.ceil(sorted.length / 2) - 1] ?? 0;
+    const upper = sorted[Math.floor(sorted.length / 2)] ?? 0;
+    return (lower + upper) / 2;
+};
+
+const isWeekend = (date: Date) => date.getDay() === SUNDAY || date.getDay() === SATURDAY;
+
+const previousWorkingDay = (date: Date): Date => {
+    const previous = new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1);
+    return isWeekend(previous) ? previousWorkingDay(previous) : previous;
+};
+
+// Consecutive working days with a review, ending today or the previous working day; weekends neither count nor break it
+const streakLength = (reviewDays: Set<string>, today: Date, oldest: Date) => {
+    const latest = isWeekend(today) ? previousWorkingDay(today) : today;
+    let day = reviewDays.has(localDay(latest)) ? latest : previousWorkingDay(latest);
+    let length = 0;
+    while (day >= oldest && reviewDays.has(localDay(day))) {
+        length++;
+        day = previousWorkingDay(day);
+    }
+    return length;
+};
+
+const reviewStreaks = (prs: StatsPr[], now: Date, fetchDays: number) => {
+    const reviewDays = new Map<string, Set<string>>();
+    prs.flatMap(countedReviews).forEach(({ login, submittedAt }) => {
+        reviewDays.set(login, (reviewDays.get(login) ?? new Set()).add(localDay(new Date(submittedAt))));
+    });
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const oldest = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (fetchDays - 1));
+    return Object.fromEntries(
+        [...reviewDays]
+            .map(([login, days]) => [login, streakLength(days, today, oldest)] as const)
+            .filter(([, length]) => length > 0),
+    );
+};
+
 // Calendar days including today, so the 1 day window matches today's point on the chart
 const windowStats = (prs: StatsPr[], days: number, now: Date): StatsWindow => {
     const since = searchTimestamp(new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1)));
     const reviewed = new Map<string, Set<number>>();
     for (const pr of prs) {
-        for (const review of pr.reviews.nodes) {
-            const reviewer = review?.author;
-            // people only, not bots or the PR author replying on their own PR
-            if (
-                review?.submittedAt &&
-                reviewer &&
-                reviewer.__typename === "User" &&
-                reviewer.login !== pr.author?.login &&
-                review.submittedAt >= since
-            ) {
-                reviewed.set(reviewer.login, (reviewed.get(reviewer.login) ?? new Set()).add(pr.number));
+        for (const { login, submittedAt } of countedReviews(pr)) {
+            if (submittedAt >= since) {
+                reviewed.set(login, (reviewed.get(login) ?? new Set()).add(pr.number));
             }
         }
     }
+    const mergedInWindow = prs.filter((pr) => pr.mergedAt && pr.mergedAt >= since);
     return {
         days,
-        merged: prs.filter((pr) => pr.mergedAt && pr.mergedAt >= since).length,
+        merged: mergedInWindow.length,
+        medianMergeMs: median(mergedInWindow.map((pr) => Date.parse(pr.mergedAt ?? "") - Date.parse(pr.createdAt))),
         mergedSearch: `repo:${REPO} is:pr is:merged merged:>=${since}`,
         reviews: [...reviewed]
             .map(([login, numbers]) => ({ login, count: numbers.size }))
@@ -236,6 +306,7 @@ const reviewStats = async (): Promise<Stats> => {
     return {
         windows: STATS_WINDOW_DAYS.map((windowDays) => windowStats(prs, windowDays, now)),
         days,
+        streaks: reviewStreaks(prs, now, fetchDays),
         series: [
             { name: "Opened", values: tally(prs.map((pr) => localDay(new Date(pr.createdAt)))) },
             { name: "Merged", values: tally(prs.flatMap((pr) => (pr.mergedAt ? [localDay(new Date(pr.mergedAt))] : []))) },
@@ -282,6 +353,8 @@ let categorised: Categorised | null = null;
 let error = "";
 let nextFetch = 0;
 let rate: RateInfo | null = null;
+let viewer = "";
+let recentMerges: MergedPr[] = [];
 let stats: Stats | null = null;
 let nextStats = 0;
 let inFlight: Promise<void> | null = null;
@@ -326,6 +399,8 @@ const refreshFromGithub = async () => {
         nextFetch = monotonicAt(reset);
         error = `GitHub API budget low (${rate.remaining} left), pausing until ${clockTime(reset)}`;
     }
+    viewer = result.me;
+    recentMerges = result.merges;
     categorised = categorise(result.prs, result.me);
 };
 
@@ -365,7 +440,7 @@ const buildTabs = (): Tab[] => {
 const CLIENT_FILES = new Map([
     ["/", { file: "index.html", type: "text/html; charset=utf-8", strip: false }],
     ["/style.css", { file: "style.css", type: "text/css; charset=utf-8", strip: false }],
-    ...["app.ts", "bg.ts", "chart.ts", "dom.ts", "format.ts", "types.ts"].map(
+    ...["app.ts", "bg.ts", "boot.ts", "chart.ts", "dom.ts", "format.ts", "fx.ts", "glyphs.ts", "types.ts"].map(
         (file) => [`/${file}`, { file, type: "text/javascript; charset=utf-8", strip: true }] as const,
     ),
 ]);
@@ -390,6 +465,8 @@ const dashboardData = (): DashboardData => ({
     error,
     rate,
     stats,
+    viewer,
+    recentMerges,
 });
 
 // Rejects other Host headers so a rebound DNS name can't read PR data through the browser

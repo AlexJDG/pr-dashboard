@@ -1,6 +1,9 @@
-const GLYPHS = "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホ0123456789ABCDEF<>/{}=+*";
+import { randomGlyph } from "./glyphs.ts";
+
 const GLYPH_PX = 16;
 const RAIN_STEP_MS = 70;
+const SURGE_STEP_MS = 30;
+const SURGE_MS = 2000;
 // Chance per step that a drop past the bottom restarts, so columns stay out of sync
 const RAIN_RESTART_CHANCE = 0.025;
 const RAIN_FADE = 0.12;
@@ -23,6 +26,7 @@ const floorCtx = floor?.getContext("2d");
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let drops: number[] = [];
 let lastRainStep = 0;
+let surgeUntil = 0;
 
 const fitToScreen = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
     const scale = devicePixelRatio;
@@ -41,8 +45,6 @@ const resize = () => {
         fitToScreen(floor, floorCtx);
     }
 };
-
-const randomGlyph = () => GLYPHS[Math.floor(Math.random() * GLYPHS.length)] ?? "0";
 
 const stepRain = (ctx: CanvasRenderingContext2D, height: number) => {
     // Fade old glyphs towards transparent rather than a solid colour, so the page background shows through
@@ -89,7 +91,7 @@ const drawFloor = (ctx: CanvasRenderingContext2D, width: number, height: number,
 };
 
 const frame = (now: number) => {
-    if (rain && rainCtx && now - lastRainStep >= RAIN_STEP_MS) {
+    if (rain && rainCtx && now - lastRainStep >= (now < surgeUntil ? SURGE_STEP_MS : RAIN_STEP_MS)) {
         lastRainStep = now;
         stepRain(rainCtx, rain.clientHeight);
     }
@@ -100,6 +102,15 @@ const frame = (now: number) => {
         requestAnimationFrame(frame);
     }
 };
+
+addEventListener("rain-surge", () => {
+    if (!rain || reduceMotion) {
+        return;
+    }
+    surgeUntil = performance.now() + SURGE_MS;
+    rain.classList.add("surge");
+    setTimeout(() => rain.classList.remove("surge"), SURGE_MS);
+});
 
 addEventListener("resize", resize);
 resize();
