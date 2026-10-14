@@ -64,6 +64,7 @@ def graphql(query, **variables):
 
 
 STATS_DAYS = 7
+CHART_DAYS = 14
 STATS_REFRESH_SECONDS = 300
 STATS_QUERY = """
 query($q: String!, $merged: String!, $after: String) {
@@ -71,31 +72,48 @@ query($q: String!, $merged: String!, $after: String) {
   search(query: $q, type: ISSUE, first: 100, after: $after) {
     pageInfo { hasNextPage endCursor }
     nodes { ... on PullRequest {
-      number author { login }
+      number createdAt mergedAt closedAt author { login }
       reviews(first: 100) { nodes { submittedAt author { login __typename } } }
     } }
   }
 }"""
 
 
+def local_day(iso):
+    return datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone().date()
+
+
 def review_stats():
-    since = (datetime.now().astimezone() - timedelta(days=STATS_DAYS)).strftime("%Y-%m-%d")
-    variables = {"q": f"repo:{REPO} is:pr updated:>={since}", "merged": f"repo:{REPO} is:pr is:merged merged:>={since}"}
-    reviewed = {}
+    today = datetime.now().astimezone().date()
+    review_since = (today - timedelta(days=STATS_DAYS)).isoformat()
+    chart_since = today - timedelta(days=CHART_DAYS - 1)
+    variables = {
+        "q": f"repo:{REPO} is:pr updated:>={chart_since.isoformat()}",
+        "merged": f"repo:{REPO} is:pr is:merged merged:>={review_since}",
+    }
+    reviewed, prs_ = {}, []
     while True:
         result = graphql(STATS_QUERY, **variables)
         for pr in result["search"]["nodes"]:
+            prs_.append(pr)
             for review in pr["reviews"]["nodes"]:
                 reviewer = review["author"]
                 # people only, not bots or the PR author replying on their own PR
-                if reviewer and reviewer["__typename"] == "User" and reviewer["login"] != (pr["author"] or {}).get("login") and review["submittedAt"] >= since:
+                if reviewer and reviewer["__typename"] == "User" and reviewer["login"] != (pr["author"] or {}).get("login") and review["submittedAt"] >= review_since:
                     reviewed.setdefault(reviewer["login"], set()).add(pr["number"])
         page = result["search"]["pageInfo"]
         if not page["hasNextPage"]:
             break
         variables["after"] = page["endCursor"]
-    by_dev = sorted(((login, len(prs)) for login, prs in reviewed.items()), key=lambda r: (-r[1], r[0].lower()))
-    return {"merged": result["merged"]["issueCount"], "merged_search": variables["merged"], "reviews": by_dev}
+    days = [chart_since + timedelta(days=i) for i in range(CHART_DAYS)]
+    tally = lambda dates: [sum(d == day for d in dates) for day in days]
+    daily = {
+        "Opened": tally([local_day(p["createdAt"]) for p in prs_]),
+        "Merged": tally([local_day(p["mergedAt"]) for p in prs_ if p["mergedAt"]]),
+        "Closed": tally([local_day(p["closedAt"]) for p in prs_ if p["closedAt"] and not p["mergedAt"]]),
+    }
+    by_dev = sorted(((login, len(numbers)) for login, numbers in reviewed.items()), key=lambda r: (-r[1], r[0].lower()))
+    return {"merged": result["merged"]["issueCount"], "merged_search": variables["merged"], "reviews": by_dev, "days": days, "daily": daily}
 
 
 def rate_limit():
@@ -330,6 +348,32 @@ footer { margin-top: 2rem; font-size: 12px; }
 .bar { display: block; height: 100%; min-width: 2px; background: var(--cyan); border-radius: 0 4px 4px 0; box-shadow: 0 0 8px -2px var(--cyan); transition: width .6s ease-out; }
 .bar-value { text-align: right; color: var(--muted); }
 
+.s-opened { --s: #00a3bf; } .s-merged { --s: #a070ff; } .s-closed { --s: #c48300; }
+.chart-tile { margin-top: .75rem; cursor: default; display: block; }
+.chart-tile:hover { transform: none; }
+.chart-head { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
+.legend { display: flex; gap: 1rem; font-size: 12px; }
+.legend-item { display: inline-flex; align-items: center; gap: .4rem; }
+.key { display: inline-block; width: 14px; height: 2px; background: var(--s); border-radius: 1px; vertical-align: middle; margin-right: .4rem; }
+.legend .key { margin-right: 0; }
+.chart { position: relative; margin-top: .75rem; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.grid { stroke: var(--line); stroke-width: 1; }
+.axis { fill: var(--muted); font: 11px "JetBrains Mono", monospace; }
+.line { fill: none; stroke: var(--s); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 4px var(--s)); }
+.dot { fill: var(--s); stroke: #0c1218; stroke-width: 2; }
+.leader { stroke: var(--s); stroke-width: 1; }
+.end-label { fill: var(--fg); font: 12px "JetBrains Mono", monospace; }
+.crosshair { stroke: var(--muted); stroke-width: 1; opacity: 0; pointer-events: none; }
+.hit { fill: transparent; }
+.chart-tip {
+    position: absolute; top: 0; pointer-events: none; z-index: 2; font-size: 12px; line-height: 1.6;
+    background: #0c1218; border: 1px solid var(--line); border-radius: 4px; padding: .4rem .6rem; white-space: nowrap;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, .6);
+}
+details { margin-top: .5rem; font-size: 12px; }
+details table { margin-top: .5rem; }
+
 @property --p { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 @keyframes fill { to { --p: 360deg; } }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -348,6 +392,74 @@ footer { margin-top: 2rem; font-size: 12px; }
 """
 
 
+SERIES_CLASS = {"Opened": "s-opened", "Merged": "s-merged", "Closed": "s-closed"}
+CHART_W, CHART_H = 1000, 240
+CHART_PAD = {"top": 12, "right": 110, "bottom": 28, "left": 36}
+GRID_STEPS = 4
+LABEL_GAP = 16
+
+
+def nice_max(n):
+    step = max(1, -(-n // GRID_STEPS))
+    return step * GRID_STEPS
+
+
+def line_chart(days, daily):
+    plot_w = CHART_W - CHART_PAD["left"] - CHART_PAD["right"]
+    plot_h = CHART_H - CHART_PAD["top"] - CHART_PAD["bottom"]
+    top = nice_max(max(max(v) for v in daily.values()))
+    x = lambda i: CHART_PAD["left"] + plot_w * i / (len(days) - 1)
+    y = lambda v: CHART_PAD["top"] + plot_h * (1 - v / top)
+    grid = "".join(
+        f'<line class=grid x1={CHART_PAD["left"]} x2={CHART_PAD["left"] + plot_w} y1={y(v):.1f} y2={y(v):.1f} />'
+        f'<text class=axis x={CHART_PAD["left"] - 8} y={y(v) + 4:.1f} text-anchor=end>{v}</text>'
+        for v in range(0, top + 1, top // GRID_STEPS)
+    )
+    x_labels = "".join(
+        f'<text class=axis x={x(i):.1f} y={CHART_H - 8} text-anchor=middle>{day:%d %b}</text>'
+        for i, day in enumerate(days) if i % 2 == (len(days) - 1) % 2
+    )
+    lines = "".join(
+        f'<polyline class="line {SERIES_CLASS[name]}" points="{" ".join(f"{x(i):.1f},{y(v):.1f}" for i, v in enumerate(values))}" />'
+        + "".join(f'<circle class="dot {SERIES_CLASS[name]}" cx={x(i):.1f} cy={y(v):.1f} r=4 />' for i, v in enumerate(values))
+        for name, values in daily.items()
+    )
+    # end labels sorted top to bottom and pushed apart so they never overlap; a leader line joins each to its line
+    ends = sorted(((y(values[-1]), name, values[-1]) for name, values in daily.items()))
+    placed = []
+    for end_y, name, value in ends:
+        placed.append((end_y, max(end_y, placed[-1][1] + LABEL_GAP) if placed else end_y, name, value))
+    end_x = x(len(days) - 1)
+    labels = "".join(
+        f'<line class="leader {SERIES_CLASS[name]}" x1={end_x + 6:.1f} y1={line_y:.1f} x2={end_x + 18:.1f} y2={label_y:.1f} />'
+        f'<text class=end-label x={end_x + 22:.1f} y={label_y + 4:.1f}>{name} {value}</text>'
+        for line_y, label_y, name, value in placed
+    )
+    step = plot_w / (len(days) - 1)
+    hits = "".join(
+        f'<rect class=hit x={x(i) - step / 2:.1f} y={CHART_PAD["top"]} width={step:.1f} height={plot_h} data-x={x(i):.1f} '
+        f'data-tip="{day:%a %d %b}|' + "|".join(f"{name}:{values[i]}" for name, values in daily.items()) + '" />'
+        for i, day in enumerate(days)
+    )
+    legend = "".join(f'<span class=legend-item><span class="key {SERIES_CLASS[name]}"></span>{name}</span>' for name in daily)
+    rows = "".join(
+        f"<tr><td>{day:%a %d %b}</td>" + "".join(f"<td>{values[i]}</td>" for values in daily.values()) + "</tr>"
+        for i, day in enumerate(days)
+    )
+    return f"""<div class="tile chart-tile">
+<div class=chart-head><span class=tile-label>PRs per day, last {len(days)} days</span><span class=legend>{legend}</span></div>
+<div class=chart>
+<svg viewBox="0 0 {CHART_W} {CHART_H}" role=img aria-label="Opened, merged and closed PRs per day">
+{grid}{x_labels}{lines}{labels}
+<line class=crosshair x1=0 x2=0 y1={CHART_PAD["top"]} y2={CHART_PAD["top"] + plot_h} />
+{hits}
+</svg>
+<div class=chart-tip hidden></div>
+</div>
+<details><summary class=muted>Table</summary><table><thead><tr><th>Day</th>{"".join(f"<th>{n}</th>" for n in daily)}</tr></thead>{rows}</table></details>
+</div>"""
+
+
 def stats_panel():
     if not stats:
         return ""
@@ -361,11 +473,12 @@ def stats_panel():
     ) or "<p class=muted>No reviews</p>"
     merged_url = f"https://github.com/{REPO}/pulls?q={urllib.parse.quote_plus(stats['merged_search'])}"
     return f"""<div class=stats>
-<h2>Last {STATS_DAYS} days</h2>
+<h2>Stats</h2>
 <div class=stats-grid>
-<a class="tile stat" href="{merged_url}"><span class=tile-label>Merged PRs</span><span class=big>{stats["merged"]}</span></a>
-<div class="tile reviews"><span class=tile-label>PRs reviewed, by dev</span>{bars}</div>
+<a class="tile stat" href="{merged_url}"><span class=tile-label>Merged, last {STATS_DAYS} days</span><span class=big>{stats["merged"]}</span></a>
+<div class="tile reviews"><span class=tile-label>PRs reviewed by dev, last {STATS_DAYS} days</span>{bars}</div>
 </div>
+{line_chart(stats["days"], stats["daily"])}
 </div>"""
 
 
@@ -427,6 +540,29 @@ document.addEventListener("click", e => {{
     const row = e.target.closest("tr[data-href]");
     if (row && !e.target.closest("a")) window.open(row.dataset.href, "_blank", "noopener");
 }});
+document.addEventListener("mouseover", e => {{
+    const hit = e.target.closest(".hit");
+    const chart = e.target.closest(".chart");
+    if (!chart) return;
+    const tip = chart.querySelector(".chart-tip");
+    const cross = chart.querySelector(".crosshair");
+    if (!hit) {{ tip.hidden = true; cross.style.opacity = 0; return; }}
+    const [day, ...values] = hit.dataset.tip.split("|");
+    tip.replaceChildren(Object.assign(document.createElement("b"), {{ textContent: day }}), ...values.map(v => {{
+        const [name, n] = v.split(":");
+        const row = document.createElement("div");
+        row.innerHTML = `<span class="key s-${{name.toLowerCase()}}"></span>${{name}} <b>${{n}}</b>`;
+        return row;
+    }}));
+    cross.setAttribute("x1", hit.dataset.x);
+    cross.setAttribute("x2", hit.dataset.x);
+    cross.style.opacity = 1;
+    const svg = chart.querySelector("svg");
+    const px = hit.dataset.x * svg.clientWidth / {CHART_W};
+    tip.hidden = false;
+    tip.style.left = Math.min(px + 12, chart.clientWidth - tip.offsetWidth) + "px";
+}});
+document.addEventListener("mouseleave", () => document.querySelectorAll(".chart-tip").forEach(t => t.hidden = true));
 show(location.hash.slice(1), true);
 setInterval(() => fetch("/version").then(r => r.text()).then(v => v !== "{VERSION}" && location.reload()).catch(() => {{}}), 1000);
 // swap content in place rather than navigating, so the browser tab shows no loading state
