@@ -33,7 +33,7 @@ query($q: String!) {
   viewer { login }
   search(query: $q, type: ISSUE, first: 100) {
     nodes { ... on PullRequest {
-      number title url createdAt mergeStateStatus mergeable reviewDecision author { login }
+      number title url createdAt updatedAt mergeStateStatus mergeable reviewDecision author { login }
       reviewThreads(first: 100) { nodes { isResolved } }
       labels(first: 10) { nodes { name color } }
       commits(last: 1) { nodes { commit {
@@ -104,17 +104,29 @@ def unresolved_badge(pr):
     return f" <span class=unresolved>{pr['unresolved']} unresolved</span>" if pr["unresolved"] else ""
 
 
+AGE_UNITS = [("d", 86400), ("h", 3600), ("m", 60)]
+
+
+def ago(iso):
+    seconds = (datetime.now().astimezone() - datetime.fromisoformat(iso.replace("Z", "+00:00"))).total_seconds()
+    return next((f"{int(seconds // size)}{unit}" for unit, size in AGE_UNITS if seconds >= size), "now")
+
+
+def age_cell(pr):
+    return f'<td class=age title="Opened {pr["createdAt"]}, updated {pr["updatedAt"]}">{ago(pr["createdAt"])} / {ago(pr["updatedAt"])}</td>'
+
+
 def table(prs_, kodiak=False):
     rows = "".join(
         f'<tr data-href="{html.escape(p["url"])}"{" class=blocked" if kodiak and blocked(p) else ""}>'
         f'<td><a href="{html.escape(p["url"])}" target=_blank rel=noopener>#{p["number"]}</a></td>'
         f'<td>{html.escape(p["title"])}{"".join(map(pill, p["labels"]))}{unresolved_badge(p)}</td>'
-        f'<td>{html.escape(p["author"]["login"])}</td><td>{html.escape(p["mergeStateStatus"].lower())}</td>'
+        f'<td>{html.escape(p["author"]["login"])}</td>{age_cell(p)}<td>{html.escape(p["mergeStateStatus"].lower())}</td>'
         + (f'<td>{html.escape(p["kodiak"])}</td>' if kodiak else "") + "</tr>"
         for p in prs_
-    ) or f"<tr><td colspan={5 if kodiak else 4} class=muted>None</td></tr>"
+    ) or f"<tr><td colspan={6 if kodiak else 5} class=muted>None</td></tr>"
     return (
-        "<table><thead><tr><th>PR</th><th>Title</th><th>Author</th><th>Merge state</th>"
+        "<table><thead><tr><th>PR</th><th>Title</th><th>Author</th><th>Opened / updated</th><th>Merge state</th>"
         + ("<th>Kodiak</th>" if kodiak else "") + f"</tr></thead>{rows}</table>"
     )
 
@@ -220,7 +232,7 @@ table{{width:100%;border-collapse:collapse}} td,th{{padding:.5rem;border-bottom:
 background:conic-gradient(var(--accent) var(--p),var(--line) 0);animation:fill {REFRESH_SECONDS}s linear forwards}}
 .loading .pie{{background:none;border:3px solid var(--line);border-top-color:var(--accent);box-sizing:border-box;animation:spin .8s linear infinite}}
 tr.blocked{{opacity:.55}} tr[data-href]{{cursor:pointer}} tr[data-href]:hover{{background:var(--line)}}
-a{{color:var(--accent)}} .unresolved{{font-size:12px;color:var(--hot);white-space:nowrap}} .label{{display:inline-block;font-size:12px;padding:0 .5em;border:1px solid;border-radius:1em;white-space:nowrap}} .gh{{font-size:.6em;font-weight:400}}
+a{{color:var(--accent)}} .unresolved{{font-size:12px;color:var(--hot);white-space:nowrap}} .age{{white-space:nowrap}} .label{{display:inline-block;font-size:12px;padding:0 .5em;border:1px solid;border-radius:1em;white-space:nowrap}} .gh{{font-size:.6em;font-weight:400}}
 </style>
 <main data-version="{VERSION}">
 <div class=tiles>{tiles}</div>
