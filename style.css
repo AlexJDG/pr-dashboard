@@ -67,9 +67,13 @@ a:hover { text-shadow: 0 0 8px var(--cyan); }
 table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 th { white-space: nowrap; color: var(--muted); font-weight: 400; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
 td, th { padding: .55rem .75rem; border-bottom: 1px solid var(--line); text-align: left; }
-tr:last-child td { border-bottom: 0; }
-tr[data-href] { cursor: pointer; transition: background .15s, box-shadow .15s; }
-tr[data-href]:hover { background: rgba(0, 229, 255, .06); box-shadow: inset 3px 0 0 var(--cyan); }
+tbody > :last-child td { border-bottom: 0; }
+a.row { display: contents; color: inherit; }
+a.row:hover { text-shadow: none; }
+.row tr { transition: background .15s, box-shadow .15s; }
+.row:hover tr { background: rgba(0, 229, 255, .06); box-shadow: inset 3px 0 0 var(--cyan); }
+.num { color: var(--cyan); }
+.row:hover .num { text-shadow: 0 0 8px var(--cyan); }
 tr.blocked { opacity: .5; }
 .enter tbody tr { animation: rise .35s ease-out backwards; animation-delay: calc(var(--i, 0) * 35ms); }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }

@@ -25,28 +25,33 @@ const labelStyle = (colour: string) => {
 
 const pill = (label: Label) => [" ", h("span", { class: "label", style: labelStyle(label.color) }, label.name)];
 
+// The link wraps the whole row so hovering anywhere shows its URL; display: contents keeps the table layout
 const tableRow = (pr: PrRow, i: number, kodiak: boolean) =>
     h(
-        "tr",
-        { style: `--i:${i}`, "data-href": pr.url, class: kodiak && pr.blocked ? "blocked" : undefined },
-        h("td", {}, h("a", { href: pr.url, target: "_blank", rel: "noopener" }, `#${pr.number}`)),
+        "a",
+        { class: "row", href: pr.url, rel: "noopener" },
         h(
-            "td",
-            {},
-            pr.title,
-            pr.labels.flatMap(pill),
-            pr.unresolved ? [" ", h("span", { class: "unresolved" }, `${pr.unresolved} unresolved`)] : null,
+            "tr",
+            { style: `--i:${i}`, class: kodiak && pr.blocked ? "blocked" : undefined },
+            h("td", {}, h("span", { class: "num" }, `#${pr.number}`)),
+            h(
+                "td",
+                {},
+                pr.title,
+                pr.labels.flatMap(pill),
+                pr.unresolved ? [" ", h("span", { class: "unresolved" }, `${pr.unresolved} unresolved`)] : null,
+            ),
+            h(
+                "td",
+                { class: "diff" },
+                h("span", { class: "add" }, `+${pr.additions.toLocaleString("en-US")}`),
+                " ",
+                h("span", { class: "del" }, `-${pr.deletions.toLocaleString("en-US")}`),
+            ),
+            h("td", {}, pr.author),
+            h("td", { class: "age", title: `Opened ${pr.createdAt}, updated ${pr.updatedAt}` }, `${ago(pr.createdAt)} / ${ago(pr.updatedAt)}`),
+            kodiak ? h("td", {}, pr.kodiak) : null,
         ),
-        h(
-            "td",
-            { class: "diff" },
-            h("span", { class: "add" }, `+${pr.additions.toLocaleString("en-US")}`),
-            " ",
-            h("span", { class: "del" }, `-${pr.deletions.toLocaleString("en-US")}`),
-        ),
-        h("td", {}, pr.author),
-        h("td", { class: "age", title: `Opened ${pr.createdAt}, updated ${pr.updatedAt}` }, `${ago(pr.createdAt)} / ${ago(pr.updatedAt)}`),
-        kodiak ? h("td", {}, pr.kodiak) : null,
     );
 
 const table = (tab: Tab) => {
@@ -254,10 +259,6 @@ document.addEventListener("click", (e) => {
     const tab = e.target.closest<HTMLElement>(".tile[data-tab]");
     if (tab) {
         show(tab.dataset.tab ?? DEFAULT_TAB, true);
-    }
-    const row = e.target.closest<HTMLElement>("tr[data-href]");
-    if (row && !e.target.closest("a")) {
-        window.open(row.dataset.href, "_blank", "noopener");
     }
 });
 
