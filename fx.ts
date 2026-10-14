@@ -8,6 +8,7 @@ const TEAR_SPREAD_PX = 18;
 const TEAR_DELAY_MS = 150;
 const TEAR_MS = 450;
 const PERCENT = 100;
+const TERMINAL_OPEN_MS = 550;
 const TERMINAL_LINE_MS = 380;
 const TERMINAL_HOLD_MS = 900;
 const TERMINAL_OUT_MS = 350;
@@ -52,6 +53,8 @@ const breach = (prs: MergedPr[]) => {
     }
     tearScreen();
     const { x, y } = terminalOrigin();
+    // Opens at the centre of the window, travelling there from the Merged tile
+    const travel = `--dx:${x - innerWidth / 2}px;--dy:${y - innerHeight / 2}px`;
     const lines = [
         { kind: "cmd", text: `$ git merge --ff #${first.number}` },
         { kind: "hex", text: `0x ${randomHexBytes()}` },
@@ -59,16 +62,16 @@ const breach = (prs: MergedPr[]) => {
         { kind: "ok", text: prs.length > 1 ? `[OK] ${prs.length} PRs merged into main` : "[OK] merged into main" },
     ];
     const output = h("div", { class: "breach-output" });
-    const terminal = h("div", { class: "breach", style: `left:${x}px;top:${y}px`, "aria-hidden": "true" }, h("div", { class: "breach-bar" }, "uplink"), output);
+    const terminal = h("div", { class: "breach", style: travel, "aria-hidden": "true" }, h("div", { class: "breach-bar" }, "uplink"), output);
     document.body.append(terminal);
     lines.forEach(({ kind, text }, i) =>
         setTimeout(() => {
             const line = h("div", { class: kind });
             output.append(line);
             glitchType(line, text);
-        }, i * TERMINAL_LINE_MS),
+        }, TERMINAL_OPEN_MS + i * TERMINAL_LINE_MS),
     );
-    const closeAt = lines.length * TERMINAL_LINE_MS + TERMINAL_HOLD_MS;
+    const closeAt = TERMINAL_OPEN_MS + lines.length * TERMINAL_LINE_MS + TERMINAL_HOLD_MS;
     setTimeout(() => terminal.classList.add("out"), closeAt);
     setTimeout(() => terminal.remove(), closeAt + TERMINAL_OUT_MS);
 };

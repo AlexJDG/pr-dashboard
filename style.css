@@ -200,9 +200,9 @@ details table { margin-top: .5rem; }
     100% { opacity: 0; }
 }
 .breach {
-    position: fixed; z-index: 13; width: 320px; pointer-events: none; font-size: 12px;
+    position: fixed; left: 50%; top: 50%; z-index: 13; width: min(320px, 100vw - 32px); pointer-events: none; font-size: 12px;
     background: rgba(5, 7, 10, .94); border: 1px solid var(--cyan); box-shadow: 0 0 28px -6px var(--cyan);
-    transform: translate(-50%, -50%); animation: breach-in .2s steps(4) both;
+    transform: translate(-50%, -50%); animation: breach-in .55s ease-out both;
 }
 .breach-bar { padding: .15rem .6rem; background: var(--cyan); color: var(--bg); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
 /* min-height holds all four lines from the start so the window doesn't grow while typing */
@@ -211,9 +211,12 @@ details table { margin-top: .5rem; }
 .breach-output .hex { color: var(--muted); }
 .breach-output .ok { color: var(--green); text-shadow: 0 0 8px var(--green); }
 .breach.out { animation: breach-out .35s ease-in both; }
+/* a thin line glides from the Merged tile to the centre, widens, then opens like a CRT switching on */
 @keyframes breach-in {
-    from { clip-path: inset(50% 0); }
-    to { clip-path: inset(0); }
+    0% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.08, .02); }
+    55% { transform: translate(-50%, -50%) scale(.08, .02); }
+    80% { transform: translate(-50%, -50%) scale(1, .02); }
+    100% { transform: translate(-50%, -50%) scale(1, 1); }
 }
 /* collapses to a line, then to a dot, like a CRT switching off */
 @keyframes breach-out {
