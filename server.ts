@@ -378,6 +378,11 @@ const refreshFromGithub = async () => {
     }
     rate = result.rate;
     error = "";
+    const knownMerges = new Set(recentMerges.map((pr) => pr.number));
+    // Refresh stats straight away on a merge so the Merged count follows within a poll, not after the usual wait
+    if (categorised !== null && result.merges.some((pr) => !knownMerges.has(pr.number))) {
+        nextStats = 0;
+    }
     if (performance.now() >= nextStats) {
         nextStats = performance.now() + STATS_REFRESH_SECONDS * MS_PER_SECOND;
         void refreshStats();
