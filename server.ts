@@ -8,7 +8,7 @@ import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { type DatedReview, leaderStreaks, localDay } from "./leaders.ts";
+import { type DatedReview, leaderStreaks, localDay, pad2 } from "./leaders.ts";
 import type { DashboardData, Label, MergedPr, PrRow, RateInfo, Stats, StatsWindow, Tab } from "./types.ts";
 
 const REPO = "owner/repo";
@@ -24,7 +24,7 @@ const IDLE_CHECK_SECONDS = 5;
 const SELF_RESTART = process.env.SELF_RESTART === "1";
 const SELF_RESTART_EXIT_CODE = 75;
 const SELF_RESTART_POLL_MS = 1000;
-const SERVER_FILE = fileURLToPath(import.meta.url);
+const SERVER_FILES = ["server.ts", "leaders.ts", "types.ts"].map((file) => fileURLToPath(new URL(file, import.meta.url)));
 const MAX_BUFFER = 64 * 1024 * 1024;
 const GH_TIMEOUT_MS = 30 * 1000;
 
@@ -54,11 +54,13 @@ query($q: String!, $mergedQ: String!) {
 const STATS_WINDOW_DAYS = [1, 7, 28];
 const CHART_DAYS = 14;
 // The longest window plus as many days again, so a leader streak on that window has history to draw on
-const STATS_FETCH_DAYS = 56;
+const STATS_FETCH_DAYS = Math.max(...STATS_WINDOW_DAYS) * 2;
+const SEARCH_RESULT_CAP = 1000;
 const STATS_REFRESH_SECONDS = 300;
 const STATS_QUERY = `
 query($q: String!, $after: String) {
   search(query: $q, type: ISSUE, first: 100, after: $after) {
+    issueCount
     pageInfo { hasNextPage endCursor }
     nodes { ... on PullRequest {
       number createdAt mergedAt closedAt author { login }
@@ -76,7 +78,6 @@ const QUEUE = `${BASE} label:automerge -label:stacked`;
 // Stop polling until the hourly reset rather than drain the budget other gh tools share
 const MIN_RATE_REMAINING = 500;
 const GHOST_LOGIN = "ghost";
-
 const NO_KODIAK_STATUS = "no Kodiak status";
 
 type RawPr = {
@@ -121,7 +122,7 @@ type StatsPr = {
 };
 
 type StatsResult = {
-    search: { pageInfo: { hasNextPage: boolean; endCursor: string }; nodes: (StatsPr | null)[] };
+    search: { issueCount: number; pageInfo: { hasNextPage: boolean; endCursor: string }; nodes: (StatsPr | null)[] };
 };
 
 const execFileAsync = promisify(execFile);
@@ -204,8 +205,6 @@ const openPrs = async () => {
 
 const fetchRateLimit = async () => (await graphql<{ rateLimit: RateInfo }>("{ rateLimit { cost limit remaining resetAt } }")).rateLimit;
 
-const pad2 = (n: number) => String(n).padStart(2, "0");
-
 const clockTime = (date: Date) => `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 
 // GitHub search accepts whole-second UTC timestamps, which also compare correctly as strings against its own
@@ -260,15 +259,20 @@ const reviewStats = async (): Promise<Stats> => {
     const now = new Date();
     const dayOffset = (offset: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
     const days = Array.from({ length: CHART_DAYS }, (_, i) => localDay(dayOffset(i - (CHART_DAYS - 1))));
-        const variables: Record<string, string> = { q: `repo:${REPO} is:pr updated:>=${localDay(dayOffset(-STATS_FETCH_DAYS))}` };
+    const variables: Record<string, string> = { q: `repo:${REPO} is:pr updated:>=${localDay(dayOffset(-STATS_FETCH_DAYS))}` };
     const prs: StatsPr[] = [];
+    let issueCount = 0;
     while (true) {
         const result = await graphql<StatsResult>(STATS_QUERY, variables);
+        issueCount = result.search.issueCount;
         prs.push(...result.search.nodes.filter((pr): pr is StatsPr => typeof pr?.number === "number"));
         if (!result.search.pageInfo.hasNextPage) {
             break;
         }
         variables.after = result.search.pageInfo.endCursor;
+    }
+    if (issueCount > prs.length) {
+        throw new Error(`Stats cover ${prs.length} of ${issueCount} PRs, past GitHub search's ${SEARCH_RESULT_CAP} result cap`);
     }
     const datedReviews = prs.flatMap((pr) =>
         countedReviews(pr).map(({ login, submittedAt }) => ({ login, prNumber: pr.number, day: localDay(new Date(submittedAt)) })),
@@ -326,6 +330,8 @@ let rate: RateInfo | null = null;
 let viewer = "";
 let recentMerges: MergedPr[] = [];
 let stats: Stats | null = null;
+let statsError = "";
+let statsInFlight = false;
 let nextStats = 0;
 let inFlight: Promise<void> | null = null;
 let lastPoll = performance.now();
@@ -334,6 +340,22 @@ const resetTime = (info: RateInfo) => new Date(info.resetAt);
 
 // Wall-clock moment as a point on the monotonic clock
 const monotonicAt = (moment: Date) => performance.now() + (moment.getTime() - Date.now());
+
+// Runs alongside the open-PR refresh so a slow stats fetch never delays the page; keeps the last good stats on failure
+const refreshStats = async () => {
+    if (statsInFlight) {
+        return;
+    }
+    statsInFlight = true;
+    try {
+        stats = await reviewStats();
+        statsError = "";
+    } catch (e) {
+        statsError = errorText(e);
+    } finally {
+        statsInFlight = false;
+    }
+};
 
 const refreshFromGithub = async () => {
     nextFetch = performance.now() + (REFRESH_SECONDS - 1) * MS_PER_SECOND;
@@ -358,11 +380,7 @@ const refreshFromGithub = async () => {
     error = "";
     if (performance.now() >= nextStats) {
         nextStats = performance.now() + STATS_REFRESH_SECONDS * MS_PER_SECOND;
-        try {
-            stats = await reviewStats();
-        } catch (e) {
-            error = errorText(e);
-        }
+        void refreshStats();
     }
     if (rate.remaining < MIN_RATE_REMAINING) {
         const reset = resetTime(rate);
@@ -432,7 +450,7 @@ const dashboardData = (): DashboardData => ({
     refreshSeconds: REFRESH_SECONDS,
     loaded: categorised !== null,
     tabs: buildTabs(),
-    error,
+    error: error || statsError,
     rate,
     stats,
     viewer,
@@ -493,7 +511,7 @@ const exitWhenIdle = () => {
 const assertValidSyntax = async (file: string) => {
     const dir = mkdtempSync(path.join(tmpdir(), "pr-dashboard-"));
     try {
-        const stripped = path.join(dir, "server.mjs");
+        const stripped = path.join(dir, "module.mjs");
         writeFileSync(stripped, stripTypeScriptTypes(readFileSync(file, "utf8")));
         await execFileAsync(process.execPath, ["--check", stripped]);
     } finally {
@@ -501,13 +519,15 @@ const assertValidSyntax = async (file: string) => {
     }
 };
 
-// Exit with a code the launcher treats as "restart me" once server.ts changes and still parses
+const latestServerMtime = () => Math.max(...SERVER_FILES.map((file) => statSync(file).mtimeMs));
+
+// Exit with a code the launcher treats as "restart me" once a server module changes and all still parse
 const restartOnChange = () => {
-    let checkedMtime = statSync(SERVER_FILE).mtimeMs;
+    let checkedMtime = latestServerMtime();
     setInterval(async () => {
         let mtime: number;
         try {
-            mtime = statSync(SERVER_FILE).mtimeMs;
+            mtime = latestServerMtime();
         } catch {
             return; // file briefly missing mid-save or branch switch
         }
@@ -516,7 +536,7 @@ const restartOnChange = () => {
         }
         checkedMtime = mtime;
         try {
-            await assertValidSyntax(SERVER_FILE);
+            await Promise.all(SERVER_FILES.map(assertValidSyntax));
         } catch (e) {
             console.error(`Not reloading, syntax error: ${errorText(e)}`);
             return;

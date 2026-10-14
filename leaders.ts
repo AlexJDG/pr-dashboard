@@ -1,9 +1,11 @@
 const SUNDAY = 0;
 const SATURDAY = 6;
 
+export type LeaderStreak = { days: number; capped: boolean };
+
 export type DatedReview = { login: string; prNumber: number; day: string };
 
-const pad2 = (n: number) => String(n).padStart(2, "0");
+export const pad2 = (n: number) => String(n).padStart(2, "0");
 
 export const localDay = (date: Date) => `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 
@@ -29,18 +31,20 @@ const leadersOn = (reviews: DatedReview[], windowDays: number, day: Date) => {
 };
 
 // For each current leader, the working days in a row they have led the window ending that day, back from today
-// (or the last working day on a weekend). Weekends neither count nor break a run; it stops where the data does.
+// (or the last working day on a weekend). Weekends neither count nor break a run; `capped` means the data ran out first.
 export const leaderStreaks = (reviews: DatedReview[], windowDays: number, now: Date, fetchDays: number) => {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const latest = isWeekend(today) ? previousWorkingDay(today) : today;
     // The window ending on the earliest day we can judge must still lie inside the fetched range
     const earliest = localDay(shiftDays(today, windowDays - fetchDays));
-    const streak = (login: string) => {
-        let length = 0;
-        for (let day = latest; localDay(day) >= earliest && leadersOn(reviews, windowDays, day).has(login); day = previousWorkingDay(day)) {
-            length++;
+    const streak = (login: string): LeaderStreak => {
+        let days = 0;
+        let day = latest;
+        while (localDay(day) >= earliest && leadersOn(reviews, windowDays, day).has(login)) {
+            days++;
+            day = previousWorkingDay(day);
         }
-        return length;
+        return { days, capped: localDay(day) < earliest };
     };
     return Object.fromEntries([...leadersOn(reviews, windowDays, latest)].map((login) => [login, streak(login)]));
 };

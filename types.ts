@@ -36,7 +36,7 @@ export type StatsWindow = {
     medianMergeMs: number | null;
     mergedSearch: string;
     reviews: { login: string; count: number }[];
-    leaderStreaks: Record<string, number>;
+    leaderStreaks: Record<string, { days: number; capped: boolean }>;
 };
 
 export type MergedPr = { number: number; title: string; url: string; mergedAt: string };

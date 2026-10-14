@@ -26,7 +26,7 @@ let hasRendered = false;
 let refreshSeconds = DEFAULT_REFRESH_SECONDS;
 let lastData: DashboardData | null = null;
 let seenMerges: Set<number> | null = null;
-let latestMergedAt = "";
+let seedMergedAt = "";
 const provideBootData = startBoot();
 
 const storedStatsDays = () => {
@@ -138,9 +138,10 @@ const statsPanel = (repo: string, stats: Stats | null) => {
     const top = Math.max(1, ...selected.reviews.map((review) => review.count));
     const bars = selected.reviews.map(({ login, count }) => {
         const isTop = count === selected.reviews[0]?.count;
-        const leaderDays = isTop ? (selected.leaderStreaks[login] ?? 0) : 0;
+        const leaderStreak = isTop ? selected.leaderStreaks[login] : undefined;
+        const leaderDays = leaderStreak?.days ?? 0;
         const hasStreak = leaderDays >= MIN_STREAK_DAYS;
-        const leaderNote = `top reviewer for ${leaderDays} working days running`;
+        const leaderNote = `top reviewer for ${leaderDays}${leaderStreak?.capped ? "+" : ""} working days running`;
         return h(
             "div",
             {
@@ -152,7 +153,7 @@ const statsPanel = (repo: string, stats: Stats | null) => {
                 { class: "bar-name" },
                 h("span", { class: "bar-login" }, login),
                 isTop
-                    ? h("span", { class: "crown", role: "img", "aria-label": hasStreak ? `Top reviewer, ${leaderNote}` : "Top reviewer" }, hasStreak ? `♛ ${leaderDays}d` : "♛")
+                    ? h("span", { class: "crown", role: "img", "aria-label": hasStreak ? `Top reviewer, ${leaderNote}` : "Top reviewer" }, hasStreak ? `♛ ${leaderDays}d${leaderStreak?.capped ? "+" : ""}` : "♛")
                     : null,
             ),
             h("span", { class: "bar-track" }, h("span", { class: "bar", style: `width:${((count / top) * PERCENT).toFixed(1)}%` })),
@@ -282,8 +283,8 @@ const draw = (data: DashboardData) => {
     hasRendered = true;
 };
 
-// The first loaded payload only seeds the cursor, so merges from before the page opened don't celebrate.
-// Only merges after the latest one seen count, since the list is ordered by last update, not merge time.
+// The first loaded payload only seeds the seen set and cutoff, so merges from before the page opened don't celebrate.
+// The cutoff stays fixed because the list is ordered by last update, not merge time; the seen set stops repeats.
 const celebrateNewMerges = (data: DashboardData) => {
     if (!data.loaded) {
         return;
@@ -291,13 +292,13 @@ const celebrateNewMerges = (data: DashboardData) => {
     const seen = seenMerges ?? new Set<number>();
     const fresh = seenMerges
         ? data.recentMerges
-              .filter((pr) => pr.mergedAt > latestMergedAt || (pr.mergedAt === latestMergedAt && !seen.has(pr.number)))
+              .filter((pr) => pr.mergedAt >= seedMergedAt && !seen.has(pr.number))
               .toSorted((a, b) => a.mergedAt.localeCompare(b.mergedAt))
         : [];
-    data.recentMerges.forEach((pr) => {
-        seen.add(pr.number);
-        latestMergedAt = pr.mergedAt > latestMergedAt ? pr.mergedAt : latestMergedAt;
-    });
+    if (!seenMerges) {
+        seedMergedAt = data.recentMerges.reduce((latest, pr) => (pr.mergedAt > latest ? pr.mergedAt : latest), "");
+    }
+    data.recentMerges.forEach((pr) => seen.add(pr.number));
     seenMerges = seen;
     celebrateMerges(fresh);
 };

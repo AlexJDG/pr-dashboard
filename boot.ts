@@ -34,9 +34,9 @@ const dataLines = (data: DashboardData) => {
     ];
 };
 
-// Returns the function that hands over the first dashboard payload, or null if loading it failed. `replay` ignores the once-per-session limit.
+// Returns the function that hands over the first dashboard payload, or null if loading it failed. `replay` ignores the once-per-session limit and reduced motion.
 export const startBoot = (replay = false) => {
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches || (!replay && !claimBoot())) {
+    if (!replay && (matchMedia("(prefers-reduced-motion: reduce)").matches || !claimBoot())) {
         return () => {};
     }
     const output = h("pre", { class: "boot-output" });
@@ -57,9 +57,13 @@ export const startBoot = (replay = false) => {
     addEventListener("keydown", finish);
 
     let provide = (_data: DashboardData | null) => {};
+    let timedOut = false;
     const firstData = new Promise<DashboardData | null>((resolve) => {
         provide = resolve;
-        setTimeout(resolve, DATA_WAIT_MS, null);
+        setTimeout(() => {
+            timedOut = true;
+            resolve(null);
+        }, DATA_WAIT_MS);
     });
 
     const typeLine = async (text: string) => {
@@ -79,7 +83,7 @@ export const startBoot = (replay = false) => {
     void (async () => {
         const uplink = await typeLine("> establishing uplink to github.com...");
         const data = await firstData;
-        uplink.textContent += data ? " OK" : " FAILED";
+        uplink.textContent += data ? " OK" : timedOut ? " TIMEOUT" : " FAILED";
         if (data) {
             for (const line of dataLines(data)) {
                 await typeLine(line);

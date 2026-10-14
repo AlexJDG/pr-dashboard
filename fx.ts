@@ -67,17 +67,24 @@ const toastStack = () => {
     if (existing) {
         return existing;
     }
-    const created = h("div", { class: "toasts", "aria-live": "polite" });
+    const created = h("div", { class: "toasts" });
     document.body.append(created);
     return created;
 };
+
+const announcer = h("div", { class: "visually-hidden", "aria-live": "polite" });
+document.body.append(announcer);
 
 const dismissers = new WeakMap<Element, () => void>();
 
 const showToast = (pr: MergedPr, animate: boolean) => {
     const head = h("b", { class: "toast-head" });
     const title = h("span", { class: "toast-title" });
-    const toast = h("a", { class: "toast", href: pr.url, rel: "noopener" }, head, title);
+    const plainText = `Merged #${pr.number}: ${pr.title}`;
+    head.setAttribute("aria-hidden", "true");
+    title.setAttribute("aria-hidden", "true");
+    const toast = h("a", { class: "toast", href: pr.url, rel: "noopener", "aria-label": plainText }, head, title);
+    announcer.textContent = plainText;
     const heading = `▲ MERGED #${pr.number}`;
     const typing = animate ? [glitchType(head, heading), glitchType(title, pr.title)] : [];
     if (!animate) {
