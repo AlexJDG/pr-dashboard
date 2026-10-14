@@ -9,7 +9,7 @@ import urllib.parse
 import sys
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 REPO = "owner/repo"
@@ -61,6 +61,41 @@ def graphql(query, **variables):
         ["gh", "api", "graphql", "-f", f"query={query}", *args], capture_output=True, text=True, check=True,
     ).stdout
     return json.loads(out)["data"]
+
+
+STATS_DAYS = 7
+STATS_REFRESH_SECONDS = 300
+STATS_QUERY = """
+query($q: String!, $merged: String!, $after: String) {
+  merged: search(query: $merged, type: ISSUE, first: 1) { issueCount }
+  search(query: $q, type: ISSUE, first: 100, after: $after) {
+    pageInfo { hasNextPage endCursor }
+    nodes { ... on PullRequest {
+      number author { login }
+      reviews(first: 100) { nodes { submittedAt author { login __typename } } }
+    } }
+  }
+}"""
+
+
+def review_stats():
+    since = (datetime.now().astimezone() - timedelta(days=STATS_DAYS)).strftime("%Y-%m-%d")
+    variables = {"q": f"repo:{REPO} is:pr updated:>={since}", "merged": f"repo:{REPO} is:pr is:merged merged:>={since}"}
+    reviewed = {}
+    while True:
+        result = graphql(STATS_QUERY, **variables)
+        for pr in result["search"]["nodes"]:
+            for review in pr["reviews"]["nodes"]:
+                reviewer = review["author"]
+                # people only, not bots or the PR author replying on their own PR
+                if reviewer and reviewer["__typename"] == "User" and reviewer["login"] != (pr["author"] or {}).get("login") and review["submittedAt"] >= since:
+                    reviewed.setdefault(reviewer["login"], set()).add(pr["number"])
+        page = result["search"]["pageInfo"]
+        if not page["hasNextPage"]:
+            break
+        variables["after"] = page["endCursor"]
+    by_dev = sorted(((login, len(prs)) for login, prs in reviewed.items()), key=lambda r: (-r[1], r[0].lower()))
+    return {"merged": result["merged"]["issueCount"], "merged_search": variables["merged"], "reviews": by_dev}
 
 
 def rate_limit():
@@ -140,6 +175,7 @@ def count(key, items):
 
 
 data, error, next_fetch, rate = None, "", 0.0, None
+stats, next_stats = None, 0.0
 # Stop polling until the hourly reset rather than drain the budget other gh tools share
 MIN_RATE_REMAINING = 500
 fetch_lock = threading.Lock()
@@ -151,7 +187,7 @@ def reset_time():
 
 def fetch():
     # One GitHub query per refresh interval, shared by every open page; keeps the last good data on failure
-    global data, error, next_fetch, rate
+    global data, error, next_fetch, rate, stats, next_stats
     with fetch_lock:
         if time.time() < next_fetch:
             return
@@ -169,6 +205,12 @@ def fetch():
                 error = f"GitHub API rate limit hit, pausing until {reset_time():%H:%M}"
             return
         error = ""
+        if time.time() >= next_stats:
+            next_stats = time.time() + STATS_REFRESH_SECONDS
+            try:
+                stats = review_stats()
+            except subprocess.CalledProcessError as e:
+                error = e.stderr
         prs_.sort(key=lambda p: p["updatedAt"], reverse=True)
         if rate["remaining"] < MIN_RATE_REMAINING:
             reset = reset_time()
@@ -275,6 +317,19 @@ tr.blocked { opacity: .5; }
 .err { color: var(--red); border: 1px solid var(--red); background: rgba(255, 56, 96, .08); padding: .75rem; border-radius: 6px; white-space: pre-wrap; }
 footer { margin-top: 2rem; font-size: 12px; }
 
+.stats-grid { display: grid; grid-template-columns: minmax(160px, 1fr) 3fr; gap: .75rem; }
+@media (max-width: 640px) { .stats-grid { grid-template-columns: 1fr; } }
+.tile.stat { --c: var(--violet); display: block; }
+.tile.reviews { --c: var(--cyan); cursor: default; }
+.tile.reviews:hover { transform: none; }
+.bar-row { display: grid; grid-template-columns: minmax(90px, 160px) 1fr 3ch; align-items: center; gap: .75rem; padding: .3rem 0; }
+.bar-row:first-of-type { margin-top: .6rem; }
+.bar-row:hover .bar { box-shadow: 0 0 14px var(--cyan); }
+.bar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-track { height: 8px; }
+.bar { display: block; height: 100%; min-width: 2px; background: var(--cyan); border-radius: 0 4px 4px 0; box-shadow: 0 0 8px -2px var(--cyan); transition: width .6s ease-out; }
+.bar-value { text-align: right; color: var(--muted); }
+
 @property --p { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 @keyframes fill { to { --p: 360deg; } }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -291,6 +346,27 @@ footer { margin-top: 2rem; font-size: 12px; }
     *, *::before { animation: none !important; transition: none !important; }
 }
 """
+
+
+def stats_panel():
+    if not stats:
+        return ""
+    top = max((n for _, n in stats["reviews"]), default=1)
+    bars = "".join(
+        f'<div class=bar-row title="{html.escape(login)} reviewed {n} PR{"s" if n != 1 else ""} in the last {STATS_DAYS} days">'
+        f'<span class=bar-name>{html.escape(login)}</span>'
+        f'<span class=bar-track><span class=bar style="width:{n / top * 100:.1f}%"></span></span>'
+        f'<span class=bar-value>{n}</span></div>'
+        for login, n in stats["reviews"]
+    ) or "<p class=muted>No reviews</p>"
+    merged_url = f"https://github.com/{REPO}/pulls?q={urllib.parse.quote_plus(stats['merged_search'])}"
+    return f"""<div class=stats>
+<h2>Last {STATS_DAYS} days</h2>
+<div class=stats-grid>
+<a class="tile stat" href="{merged_url}"><span class=tile-label>Merged PRs</span><span class=big>{stats["merged"]}</span></a>
+<div class="tile reviews"><span class=tile-label>PRs reviewed, by dev</span>{bars}</div>
+</div>
+</div>"""
 
 
 def render():
@@ -328,6 +404,7 @@ def render():
 <div class=tiles>{tiles}</div>
 {f'<pre class=err>{html.escape(error)}</pre>' if error else ''}
 {panels}
+{stats_panel()}
 <footer class=muted>{
     f"[gh api] {rate['remaining']:,}/{rate['limit']:,} left &middot; resets {reset_time():%H:%M} &middot; cost {rate['cost']}/refresh"
     if rate else ""
