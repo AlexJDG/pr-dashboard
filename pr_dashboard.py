@@ -209,7 +209,7 @@ def render():
 :root{{--bg:#ffffff;--fg:#1a1a1a;--muted:#6b6b6b;--line:#e2e2e2;--accent:#2563eb;--hot:#dc2626}}
 @media (prefers-color-scheme:dark){{:root{{--bg:#111111;--fg:#eeeeee;--muted:#999999;--line:#2a2a2a;--accent:#60a5fa;--hot:#f87171}}}}
 body{{background:var(--bg);color:var(--fg);font:16px system-ui,sans-serif;max-width:960px;margin:2rem auto;padding:0 16px}}
-.tiles{{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem}}
+.tiles{{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1rem}}
 .tile{{font:inherit;color:inherit;background:none;text-align:left;cursor:pointer;padding:.75rem;border:2px solid var(--line);border-radius:8px}}
 .tile.on{{border-color:var(--accent)}}
 .big{{display:block;font-size:3.5rem;font-weight:700;line-height:1;margin-top:.25rem}} .big small{{font-size:14px;font-weight:400;color:var(--muted);white-space:nowrap}} .muted{{color:var(--muted)}} footer{{margin-top:2rem;font-size:14px}} .err{{color:var(--hot)}}
