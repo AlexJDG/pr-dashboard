@@ -1,6 +1,6 @@
 :root {
     --bg: #05070a; --panel: rgba(12, 18, 24, .72); --fg: #d6ffe9; --muted: #5f7a70; --line: #12231d;
-    --green: #00ff9c; --cyan: #00e5ff; --red: #ff3860; --amber: #ffb300; --violet: #b388ff;
+    --green: #00ff9c; --cyan: #00e5ff; --red: #ff3860; --amber: #ffb300; --violet: #b388ff; --magenta: #ff2bd6;
     --add: var(--green); --hot: var(--red); --c: var(--cyan);
     color-scheme: dark;
 }
@@ -19,6 +19,37 @@ body::after {
     content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 10;
     background: repeating-linear-gradient(transparent 0 2px, rgba(0, 0, 0, .18) 2px 3px);
 }
+.bg { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.bg::before, .bg::after {
+    content: ""; position: absolute; width: 70vmax; height: 70vmax; border-radius: 50%;
+    animation: drift 30s ease-in-out infinite alternate;
+}
+.bg::before { left: -25vmax; top: -30vmax; background: radial-gradient(circle, rgba(255, 43, 214, .13), transparent 60%); }
+.bg::after {
+    right: -25vmax; bottom: -30vmax; background: radial-gradient(circle, rgba(0, 229, 255, .1), transparent 60%);
+    animation-duration: 37s; animation-direction: alternate-reverse;
+}
+@keyframes drift { to { transform: translate(20vw, 25vh) scale(1.25); } }
+.floor {
+    position: absolute; left: -50%; right: -50%; bottom: 0; height: 70vh; overflow: hidden;
+    transform-origin: bottom; transform: perspective(600px) rotateX(58deg);
+    mask-image: linear-gradient(transparent, #000 60%);
+}
+/* Taller than the floor by one grid cell so the scroll loops seamlessly */
+.floor::before {
+    content: ""; position: absolute; inset: -64px 0 0;
+    background:
+        linear-gradient(rgba(255, 43, 214, .4) 2px, transparent 2px) 0 0 / 64px 64px,
+        linear-gradient(90deg, rgba(255, 43, 214, .4) 2px, transparent 2px) 0 0 / 64px 64px;
+    animation: floor 3s linear infinite;
+}
+@keyframes floor { to { transform: translateY(64px); } }
+.beam {
+    position: absolute; left: 0; right: 0; top: -160px; height: 160px;
+    background: linear-gradient(transparent, rgba(0, 229, 255, .07), transparent);
+    animation: beam 9s linear infinite;
+}
+@keyframes beam { to { transform: translateY(calc(100vh + 160px)); } }
 h1 { font-size: 1.1rem; font-weight: 700; margin: 0 0 1.5rem; letter-spacing: .02em; }
 .prompt { color: var(--green); text-shadow: 0 0 8px var(--green); }
 .dim, .muted { color: var(--muted); }
@@ -137,5 +168,5 @@ details table { margin-top: .5rem; }
     animation: spin .7s linear infinite;
 }
 @media (prefers-reduced-motion: reduce) {
-    *, *::before { animation: none !important; transition: none !important; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
 }
