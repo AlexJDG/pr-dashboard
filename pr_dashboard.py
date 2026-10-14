@@ -81,8 +81,9 @@ def open_prs():
 
 BASE = "is:open draft:false"
 FAILING = f"{BASE} status:failure"
-# -status:failure rather than status:success so PRs with checks still running count
-NEEDS_REVIEW = f"{BASE} review:required -status:failure"
+# GitHub leaves reviewDecision blank on some PRs that still need an approval, so exclude the decided ones
+# rather than matching review:required; -status:failure so PRs with checks still running count
+NEEDS_REVIEW = f"{BASE} -review:approved -review:changes_requested -status:failure"
 QUEUE = f"{BASE} label:automerge -label:stacked"
 
 
@@ -152,7 +153,7 @@ def fetch():
         data = (
             prs_,
             [p for p in prs_ if p["checks"] in ("FAILURE", "ERROR")],
-            [p for p in prs_ if p["reviewDecision"] == "REVIEW_REQUIRED" and p["checks"] not in ("FAILURE", "ERROR") and p["mergeable"] != "CONFLICTING"],
+            [p for p in prs_ if p["reviewDecision"] not in ("APPROVED", "CHANGES_REQUESTED") and p["checks"] not in ("FAILURE", "ERROR") and p["mergeable"] != "CONFLICTING"],
             # queued first, then mirrors Kodiak's ordering: hotfix first, then oldest
             sorted(automerge, key=lambda p: (blocked(p), not has_label(p, "hotfix"), p["createdAt"])),
         )
