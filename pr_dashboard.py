@@ -33,7 +33,7 @@ query($q: String!) {
   viewer { login }
   search(query: $q, type: ISSUE, first: 100) {
     nodes { ... on PullRequest {
-      number title url createdAt updatedAt mergeStateStatus mergeable reviewDecision author { login }
+      number title url createdAt updatedAt additions deletions mergeStateStatus mergeable reviewDecision author { login }
       reviewThreads(first: 100) { nodes { isResolved } }
       labels(first: 10) { nodes { name color } }
       commits(last: 1) { nodes { commit {
@@ -121,12 +121,13 @@ def table(prs_, kodiak=False):
         f'<tr data-href="{html.escape(p["url"])}"{" class=blocked" if kodiak and blocked(p) else ""}>'
         f'<td><a href="{html.escape(p["url"])}" target=_blank rel=noopener>#{p["number"]}</a></td>'
         f'<td>{html.escape(p["title"])}{"".join(map(pill, p["labels"]))}{unresolved_badge(p)}</td>'
+        f'<td class=diff><span class=add>+{p["additions"]:,}</span> <span class=del>-{p["deletions"]:,}</span></td>'
         f'<td>{html.escape(p["author"]["login"])}</td>{age_cell(p)}<td>{html.escape(p["mergeStateStatus"].lower())}</td>'
         + (f'<td>{html.escape(p["kodiak"])}</td>' if kodiak else "") + "</tr>"
         for p in prs_
-    ) or f"<tr><td colspan={6 if kodiak else 5} class=muted>None</td></tr>"
+    ) or f"<tr><td colspan={7 if kodiak else 6} class=muted>None</td></tr>"
     return (
-        "<table><thead><tr><th>PR</th><th>Title</th><th>Author</th><th>Opened / updated</th><th>Merge state</th>"
+        "<table><thead><tr><th>PR</th><th>Title</th><th>Lines</th><th>Author</th><th>Opened / updated</th><th>Merge state</th>"
         + ("<th>Kodiak</th>" if kodiak else "") + f"</tr></thead>{rows}</table>"
     )
 
@@ -219,8 +220,8 @@ def render():
 <title>PR Dashboard</title>
 <base target=_blank>
 <style>
-:root{{--bg:#ffffff;--fg:#1a1a1a;--muted:#6b6b6b;--line:#e2e2e2;--accent:#2563eb;--hot:#dc2626}}
-@media (prefers-color-scheme:dark){{:root{{--bg:#111111;--fg:#eeeeee;--muted:#999999;--line:#2a2a2a;--accent:#60a5fa;--hot:#f87171}}}}
+:root{{--bg:#ffffff;--fg:#1a1a1a;--muted:#6b6b6b;--line:#e2e2e2;--accent:#2563eb;--hot:#dc2626;--add:#16a34a}}
+@media (prefers-color-scheme:dark){{:root{{--bg:#111111;--fg:#eeeeee;--muted:#999999;--line:#2a2a2a;--accent:#60a5fa;--hot:#f87171;--add:#4ade80}}}}
 body{{background:var(--bg);color:var(--fg);font:16px system-ui,sans-serif;max-width:960px;margin:2rem auto;padding:0 16px}}
 .tiles{{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1rem}}
 .tile{{font:inherit;color:inherit;background:none;text-align:left;cursor:pointer;padding:.75rem;border:2px solid var(--line);border-radius:8px}}
@@ -233,7 +234,7 @@ table{{width:100%;border-collapse:collapse}} td,th{{padding:.5rem;border-bottom:
 background:conic-gradient(var(--accent) var(--p),var(--line) 0);animation:fill {REFRESH_SECONDS}s linear forwards}}
 .loading .pie{{background:none;border:3px solid var(--line);border-top-color:var(--accent);box-sizing:border-box;animation:spin .8s linear infinite}}
 tr.blocked{{opacity:.55}} tr[data-href]{{cursor:pointer}} tr[data-href]:hover{{background:var(--line)}}
-a{{color:var(--accent)}} .unresolved{{font-size:12px;color:var(--hot);white-space:nowrap}} .age{{white-space:nowrap}} .label{{display:inline-block;font-size:12px;padding:0 .5em;border:1px solid;border-radius:1em;white-space:nowrap}} .gh{{font-size:.6em;font-weight:400}}
+a{{color:var(--accent)}} .unresolved{{font-size:12px;color:var(--hot);white-space:nowrap}} .age,.diff{{white-space:nowrap}} .add{{color:var(--add)}} .del{{color:var(--hot)}} .label{{display:inline-block;font-size:12px;padding:0 .5em;border:1px solid;border-radius:1em;white-space:nowrap}} .gh{{font-size:.6em;font-weight:400}}
 </style>
 <main data-version="{VERSION}">
 <div class=tiles>{tiles}</div>
