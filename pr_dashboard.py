@@ -168,6 +168,7 @@ def fetch():
                 error = f"GitHub API rate limit hit, pausing until {reset_time():%H:%M}"
             return
         error = ""
+        prs_.sort(key=lambda p: p["updatedAt"], reverse=True)
         if rate["remaining"] < MIN_RATE_REMAINING:
             reset = reset_time()
             next_fetch = reset.timestamp()
