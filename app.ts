@@ -25,6 +25,7 @@ const loadedVersion = document.querySelector<HTMLMetaElement>("meta[name=version
 let hasRendered = false;
 let refreshSeconds = DEFAULT_REFRESH_SECONDS;
 let lastData: DashboardData | null = null;
+let optimisticMerges: { baseline: number; count: number } | null = null;
 let seenMerges: Set<number> | null = null;
 let seedMergedAt = "";
 const provideBootData = startBoot();
@@ -185,7 +186,7 @@ const statsPanel = (repo: string, stats: Stats | null) => {
                     "a",
                     { class: "tile stat", href: githubSearchUrl(repo, selected.mergedSearch) },
                     h("span", { class: "tile-label" }, `Merged, ${period}`),
-                    h("span", { class: "big" }, `${selected.merged}`),
+                    h("span", { class: "big" }, `${selected.merged + (optimisticMerges?.count ?? 0)}`),
                 ),
                 h(
                     "div",
@@ -301,6 +302,37 @@ const draw = (data: DashboardData) => {
 
 // The first loaded payload only seeds the seen set and cutoff, so merges from before the page opened don't celebrate.
 // The cutoff stays fixed because the list is ordered by last update, not merge time; the seen set stops repeats.
+// Swaps only the stats so the tiles above don't replay their animations
+const redrawStats = (data: DashboardData) => {
+    const current = document.querySelector<HTMLElement>(".stats");
+    const next = statsPanel(data.repo, data.stats);
+    const from = current?.querySelector<HTMLElement>(".stats-grid")?.offsetHeight ?? 0;
+    current?.replaceWith(next ?? "");
+    const grid = next?.querySelector<HTMLElement>(".stats-grid");
+    if (grid) {
+        animateHeight(grid, from);
+    }
+};
+
+const todayMerged = (data: DashboardData) => data.stats?.windows.find((w) => w.days === 1)?.merged;
+
+// Counts merges shown before stats catch up; dropped once today's count moves, as the server has then counted them
+const settleOptimisticMerges = (data: DashboardData) => {
+    if (optimisticMerges && todayMerged(data) !== optimisticMerges.baseline) {
+        optimisticMerges = null;
+    }
+};
+
+const addOptimisticMerges = (data: DashboardData, count: number) => {
+    const baseline = todayMerged(data);
+    if (count === 0 || baseline === undefined) {
+        return;
+    }
+    optimisticMerges = { baseline: optimisticMerges?.baseline ?? baseline, count: (optimisticMerges?.count ?? 0) + count };
+    redrawStats(data);
+    document.querySelector(".tile.stat")?.classList.add("changed");
+};
+
 const celebrateNewMerges = (data: DashboardData) => {
     if (!data.loaded) {
         return;
@@ -317,6 +349,7 @@ const celebrateNewMerges = (data: DashboardData) => {
     data.recentMerges.forEach((pr) => seen.add(pr.number));
     seenMerges = seen;
     celebrateMerges(fresh);
+    addOptimisticMerges(data, fresh.length);
 };
 
 const restartPie = () => {
@@ -346,6 +379,7 @@ const refresh = async () => {
             return;
         }
         lastData = data;
+        settleOptimisticMerges(data);
         draw(data);
         celebrateNewMerges(data);
         provideBootData(data.loaded ? data : null);
@@ -375,15 +409,7 @@ document.addEventListener("click", (e) => {
         } catch {
             // the choice just won't survive a reload
         }
-        // Swap only the stats so the tiles above don't replay their animations
-        const current = document.querySelector<HTMLElement>(".stats");
-        const next = statsPanel(lastData.repo, lastData.stats);
-        const from = current?.querySelector<HTMLElement>(".stats-grid")?.offsetHeight ?? 0;
-        current?.replaceWith(next ?? "");
-        const grid = next?.querySelector<HTMLElement>(".stats-grid");
-        if (grid) {
-            animateHeight(grid, from);
-        }
+        redrawStats(lastData);
     }
 });
 
