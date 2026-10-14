@@ -91,10 +91,11 @@ const table = (tab: Tab) => {
 
 const githubSearchUrl = (repo: string, search: string) => `https://github.com/${repo}/pulls?q=${quotePlus(search)}`;
 
-const tile = (tab: Tab, loaded: boolean) =>
+// Rendered already "on" so a redraw doesn't replay the glow transition
+const tile = (tab: Tab, loaded: boolean, active: string) =>
     h(
         "button",
-        { class: "tile", "data-tab": tab.key },
+        { class: tab.key === active ? "tile on" : "tile", "data-tab": tab.key },
         h("span", { class: "tile-label" }, tab.label),
         h(
             "span",
@@ -180,7 +181,7 @@ const renderMain = (data: DashboardData) =>
             {},
             h("h1", {}, h("span", { class: "prompt" }, ">"), ` ${data.repo}`, h("span", { class: "dim" }, "/pulls"), h("span", { class: "cursor" }, "_")),
         ),
-        h("div", { class: "tiles" }, data.tabs.map((tab) => tile(tab, data.loaded))),
+        h("div", { class: "tiles" }, data.tabs.map((tab) => tile(tab, data.loaded, location.hash.slice(1) || DEFAULT_TAB))),
         data.error ? h("pre", { class: "err" }, data.error) : null,
         h("div", { class: "panels" }, data.tabs.map((tab) => panel(tab, data.repo))),
         statsPanel(data.repo, data.stats),
