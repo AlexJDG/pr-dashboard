@@ -52,12 +52,21 @@ def blocked(pr):
     return pr["kodiak"].startswith("🛑")
 
 
-def open_prs():
+def graphql(query, **variables):
+    args = [arg for k, v in variables.items() for arg in ("-f", f"{k}={v}")]
     out = subprocess.run(
-        ["gh", "api", "graphql", "-f", f"query={QUERY}", "-f", f"q=repo:{REPO} is:pr {BASE}"],
-        capture_output=True, text=True, check=True,
+        ["gh", "api", "graphql", "-f", f"query={query}", *args], capture_output=True, text=True, check=True,
     ).stdout
-    result = json.loads(out)["data"]
+    return json.loads(out)["data"]
+
+
+def rate_limit():
+    # Still answers when the budget is spent
+    return graphql("{ rateLimit { cost limit remaining resetAt } }")["rateLimit"]
+
+
+def open_prs():
+    result = graphql(QUERY, q=f"repo:{REPO} is:pr {BASE}")
     prs_ = []
     for p in result["search"]["nodes"]:
         commit = p.pop("commits")["nodes"][0]["commit"]
@@ -125,6 +134,13 @@ def fetch():
             prs_, rate = open_prs()
         except subprocess.CalledProcessError as e:
             error = e.stderr
+            if "rate limit" in e.stderr:
+                try:
+                    rate = rate_limit()
+                except subprocess.CalledProcessError:
+                    return
+                next_fetch = reset_time().timestamp()
+                error = f"GitHub API rate limit hit, pausing until {reset_time():%H:%M}"
             return
         error = ""
         if rate["remaining"] < MIN_RATE_REMAINING:
