@@ -23,7 +23,7 @@ const replayCountGlitch = () =>
 // Manual triggers for the effects; none of them touch the seen-merge tracking
 export const mountFxMenu = (loadedData: () => DashboardData | null) => {
     const actions: [string, () => void][] = [
-        ["Merge burst", () => celebrateMerges([latestMerge(loadedData())])],
+        ["Merge breach", () => celebrateMerges([latestMerge(loadedData())])],
         ["Count glitch", replayCountGlitch],
         ["Boot sequence", () => startBoot(true)(loadedData())],
         ["Rain surge", surgeRain],
