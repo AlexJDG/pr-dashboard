@@ -51,7 +51,8 @@ def kodiak_status(commit):
 
 
 def blocked(pr):
-    return pr["kodiak"].startswith("🛑")
+    # 🛑 means Kodiak won't merge it, ⚠️ means Kodiak hit an error and isn't processing it
+    return pr["kodiak"].startswith(("🛑", "⚠️"))
 
 
 def graphql(query, **variables):
@@ -179,13 +180,17 @@ def fetch():
 
 def render():
     fetch()
-    open_prs, failing, needs_review, automerge = data or ([], [], [], [])
+    open_prs, failing_prs, needs_review, automerge = data or ([], [], [], [])
+    conflicts = [p for p in open_prs if p["mergeable"] == "CONFLICTING"]
+    queued = [p for p in automerge if not blocked(p)]
+    categorised = {p["number"] for p in failing_prs + needs_review + conflicts + queued}
     tabs = [
         ("queue", "In merge queue", automerge, QUEUE),
         ("open", "Open non-draft PRs", open_prs, BASE),
-        ("failing", "Failing checks", failing, FAILING),
-        ("conflicts", "Merge conflicts", [p for p in open_prs if p["mergeable"] == "CONFLICTING"], None),
+        ("failing", "Failing checks", failing_prs, FAILING),
+        ("conflicts", "Merge conflicts", conflicts, None),
         ("review", "Only need a review", needs_review, NEEDS_REVIEW),
+        ("other", "Everything else", [p for p in open_prs if p["number"] not in categorised], None),
     ]
     tiles = "".join(
         f'<button class=tile data-tab={key}><span class=muted>{label}</span><span class=big>{"?" if data is None else count(key, items)}</span></button>'
