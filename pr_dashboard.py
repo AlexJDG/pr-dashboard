@@ -186,11 +186,11 @@ def render():
     categorised = {p["number"] for p in failing_prs + needs_review + conflicts + queued}
     tabs = [
         ("queue", "In merge queue", automerge, QUEUE),
-        ("open", "Open non-draft PRs", open_prs, BASE),
+        ("open", "Non-draft", open_prs, BASE),
         ("failing", "Failing checks", failing_prs, FAILING),
         ("conflicts", "Merge conflicts", conflicts, None),
-        ("review", "Only need a review", needs_review, NEEDS_REVIEW),
-        ("other", "Everything else", [p for p in open_prs if p["number"] not in categorised], None),
+        ("review", "Awaiting review", needs_review, NEEDS_REVIEW),
+        ("other", "Other", [p for p in open_prs if p["number"] not in categorised], None),
     ]
     tiles = "".join(
         f'<button class=tile data-tab={key}><span class=muted>{label}</span><span class=big>{"?" if data is None else count(key, items)}</span></button>'
