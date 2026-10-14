@@ -1,4 +1,4 @@
-import { h, svg } from "./dom.ts";
+import { h, pulseStyle, svg } from "./dom.ts";
 import { dayMonth, weekdayDayMonth } from "./format.ts";
 import type { SeriesName, Stats } from "./types.ts";
 
@@ -11,6 +11,8 @@ const LABEL_GAP = 16;
 const AXIS_LABEL_OFFSET = 8;
 const AXIS_TEXT_DROP = 4;
 const DOT_RADIUS = 4;
+// The flow dash lengths in style.css are percentages of the line
+const FLOW_PATH_LENGTH = 100;
 const LEADER_START = 6;
 const LEADER_END = 18;
 const LABEL_X = 22;
@@ -36,15 +38,14 @@ export const lineChart = ({ days, series }: Pick<Stats, "days" | "series">) => {
             ? [svg("text", { class: "axis", x: fixed(x(i)), y: CHART_H - AXIS_LABEL_OFFSET, "text-anchor": "middle" }, dayMonth(day))]
             : [],
     );
-    const lines = series.flatMap(({ name, values }) => [
-        svg("polyline", {
-            class: `line ${SERIES_CLASS[name]}`,
-            points: values.map((v, i) => `${fixed(x(i))},${fixed(y(v))}`).join(" "),
-        }),
-        ...values.map((v, i) =>
-            svg("circle", { class: `dot ${SERIES_CLASS[name]}`, cx: fixed(x(i)), cy: fixed(y(v)), r: DOT_RADIUS }),
-        ),
-    ]);
+    const lines = series.flatMap(({ name, values }) => {
+        const points = values.map((v, i) => `${fixed(x(i))},${fixed(y(v))}`).join(" ");
+        return [
+            svg("polyline", { class: `line ${SERIES_CLASS[name]}`, points, style: pulseStyle(name) }),
+            svg("polyline", { class: `flow ${SERIES_CLASS[name]}`, points, pathLength: FLOW_PATH_LENGTH, style: pulseStyle(`${name} flow`) }),
+            ...values.map((v, i) => svg("circle", { class: `dot ${SERIES_CLASS[name]}`, cx: fixed(x(i)), cy: fixed(y(v)), r: DOT_RADIUS })),
+        ];
+    });
 
     // end labels sorted top to bottom and pushed apart so they never overlap; a leader line joins each to its line
     const ends = series

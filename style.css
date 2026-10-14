@@ -143,7 +143,8 @@ footer { margin-top: 2rem; font-size: 12px; }
 .bar-login { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crown { color: var(--amber); text-shadow: 0 0 8px var(--amber), 0 0 16px var(--amber); line-height: 1; }
 .bar-track { height: 8px; }
-.bar { display: block; height: 100%; min-width: 2px; background: var(--cyan); border-radius: 0 4px 4px 0; box-shadow: 0 0 8px -2px var(--cyan); transition: width .6s ease-out; }
+.bar { display: block; height: 100%; min-width: 2px; background: var(--cyan); border-radius: 0 4px 4px 0; box-shadow: 0 0 8px -2px var(--cyan); transition: width .6s ease-out;; animation: bar-pulse var(--pulse-ms) ease-in-out var(--pulse-delay) infinite; }
+@keyframes bar-pulse { 50% { box-shadow: 0 0 14px 0 var(--cyan); filter: brightness(1.3); } }
 .bar-value { text-align: right; color: var(--muted); }
 
 .s-opened { --s: #00a3bf; } .s-merged { --s: #a070ff; } .s-closed { --s: #c48300; }
@@ -158,7 +159,15 @@ footer { margin-top: 2rem; font-size: 12px; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .grid { stroke: var(--line); stroke-width: 1; }
 .axis { fill: var(--muted); font: 11px "JetBrains Mono", monospace; }
-.line { fill: none; stroke: var(--s); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 4px var(--s)); }
+.line { fill: none; stroke: var(--s); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 4px var(--s));; animation: line-pulse var(--pulse-ms) ease-in-out var(--pulse-delay) infinite; }
+@keyframes line-pulse { 50% { filter: drop-shadow(0 0 9px var(--s)); } }
+/* a short bright dash of energy running along each line; dash and gap add up to the line's pathLength */
+.flow {
+    fill: none; stroke: #ffffff; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 4 96; opacity: .7;
+    filter: drop-shadow(0 0 4px var(--s)); pointer-events: none;
+    animation: line-flow var(--pulse-ms) linear var(--pulse-delay) infinite;
+}
+@keyframes line-flow { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
 .dot { fill: var(--s); stroke: #0c1218; stroke-width: 2; }
 .leader { stroke: var(--s); stroke-width: 1; }
 .end-label { fill: var(--fg); font: 12px "JetBrains Mono", monospace; }

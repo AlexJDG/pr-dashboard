@@ -1,6 +1,6 @@
 import { startBoot } from "./boot.ts";
 import { CHART_W, lineChart } from "./chart.ts";
-import { h } from "./dom.ts";
+import { h, pulseStyle } from "./dom.ts";
 import { ago, clockTime, compactDuration, quotePlus } from "./format.ts";
 import { celebrateMerges } from "./fx.ts";
 import { mountFxMenu } from "./fxmenu.ts";
@@ -157,7 +157,7 @@ const statsPanel = (repo: string, stats: Stats | null) => {
                     ? h("span", { class: "crown", role: "img", "aria-label": hasStreak ? `Top reviewer, ${leaderNote}` : "Top reviewer" }, hasStreak ? `♛ ${leaderDays}d${leaderStreak?.capped ? "+" : ""}` : "♛")
                     : null,
             ),
-            h("span", { class: "bar-track" }, h("span", { class: "bar", style: `width:${((count / top) * PERCENT).toFixed(1)}%` })),
+            h("span", { class: "bar-track" }, h("span", { class: "bar", style: `width:${((count / top) * PERCENT).toFixed(1)}%;${pulseStyle(login)}` })),
             h("span", { class: "bar-value" }, `${count}`),
         );
     });
