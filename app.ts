@@ -305,10 +305,11 @@ document.addEventListener("click", (e) => {
         // Swap only the stats so the tiles above don't replay their animations
         const current = document.querySelector<HTMLElement>(".stats");
         const next = statsPanel(lastData.repo, lastData.stats);
-        if (current && next) {
-            const from = current.offsetHeight;
-            current.replaceWith(next);
-            animateHeight(next, from);
+        const from = current?.querySelector<HTMLElement>(".stats-grid")?.offsetHeight ?? 0;
+        current?.replaceWith(next ?? "");
+        const grid = next?.querySelector<HTMLElement>(".stats-grid");
+        if (grid) {
+            animateHeight(grid, from);
         }
     }
 });

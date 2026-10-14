@@ -113,8 +113,12 @@ tr.blocked { opacity: .5; }
 footer { margin-top: 2rem; font-size: 12px; }
 
 /* clip rather than hidden so the tiles' hover glow can spill past the edge */
-.stats { overflow: clip; overflow-clip-margin: 24px; transition: height .3s cubic-bezier(.2, .8, .2, 1); }
-.stats-grid { display: grid; grid-template-columns: minmax(160px, 1fr) 3fr; gap: .75rem; }
+.stats-grid {
+    display: grid; grid-template-columns: minmax(160px, 1fr) 3fr; gap: .75rem;
+    overflow: clip; overflow-clip-margin: 24px; transition: height .3s cubic-bezier(.2, .8, .2, 1);
+}
+/* lets the tiles shrink with the grid while its height animates */
+.stats-grid > .tile { min-height: 0; }
 @media (max-width: 640px) { .stats-grid { grid-template-columns: 1fr; } }
 .tile.stat { --c: var(--violet); display: block; }
 .tile.reviews { --c: var(--cyan); cursor: default; }
