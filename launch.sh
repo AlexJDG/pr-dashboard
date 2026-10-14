@@ -6,6 +6,8 @@ PORT="${1:-8765}"
 URL="http://localhost:$PORT"
 CHROME="/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"
 PROFILE="Default"
+# The server exits with this code after server.ts changes, asking to be started again
+RESTART_EXIT_CODE=75
 
 cd "$(dirname "$0")"
 
@@ -14,7 +16,16 @@ if curl -sf "$URL/version" >/dev/null; then
   exit
 fi
 
-IDLE_EXIT_SECONDS=180 python3 pr_dashboard.py "$PORT" &
+run_server() {
+  local code
+  while true; do
+    code=0
+    IDLE_EXIT_SECONDS=180 SELF_RESTART=1 node server.ts "$PORT" || code=$?
+    [ "$code" -eq "$RESTART_EXIT_CODE" ] || return "$code"
+  done
+}
+
+run_server &
 server=$!
 until curl -sf "$URL/version" >/dev/null; do sleep 0.2; done
 "$CHROME" --profile-directory="$PROFILE" --app="$URL"
