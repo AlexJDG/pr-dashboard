@@ -12,11 +12,24 @@ const PERCENT = 100;
 const TOOLTIP_OFFSET = 12;
 const DEFAULT_REFRESH_SECONDS = 15;
 const DATA_TIMEOUT_MS = 60 * 1000;
+const DEFAULT_STATS_DAYS = 7;
+const STATS_DAYS_KEY = "statsDays";
 
 const pie = document.querySelector<HTMLElement>(".pie");
 const loadedVersion = document.querySelector<HTMLMetaElement>("meta[name=version]")?.content ?? null;
 let hasRendered = false;
 let refreshSeconds = DEFAULT_REFRESH_SECONDS;
+let lastData: DashboardData | null = null;
+
+const storedStatsDays = () => {
+    try {
+        return Number(localStorage.getItem(STATS_DAYS_KEY)) || DEFAULT_STATS_DAYS;
+    } catch {
+        return DEFAULT_STATS_DAYS;
+    }
+};
+
+let statsDays = storedStatsDays();
 
 const labelStyle = (colour: string) => {
     const safe = HEX_COLOUR.test(colour) ? colour : DEFAULT_LABEL_COLOR;
@@ -108,11 +121,16 @@ const statsPanel = (repo: string, stats: Stats | null) => {
     if (!stats) {
         return null;
     }
-    const top = Math.max(1, ...stats.reviews.map((review) => review.count));
-    const bars = stats.reviews.map(({ login, count }) =>
+    const selected = stats.windows.find((w) => w.days === statsDays) ?? stats.windows.find((w) => w.days === DEFAULT_STATS_DAYS) ?? stats.windows[0];
+    if (!selected) {
+        return null;
+    }
+    const period = selected.days === 1 ? "last 24 hours" : `last ${selected.days} days`;
+    const top = Math.max(1, ...selected.reviews.map((review) => review.count));
+    const bars = selected.reviews.map(({ login, count }) =>
         h(
             "div",
-            { class: "bar-row", title: `${login} reviewed ${count} PR${count === 1 ? "" : "s"} in the last ${stats.reviewDays} days` },
+            { class: "bar-row", title: `${login} reviewed ${count} PR${count === 1 ? "" : "s"} in the ${period}` },
             h("span", { class: "bar-name" }, login),
             h("span", { class: "bar-track" }, h("span", { class: "bar", style: `width:${((count / top) * PERCENT).toFixed(1)}%` })),
             h("span", { class: "bar-value" }, `${count}`),
@@ -121,20 +139,31 @@ const statsPanel = (repo: string, stats: Stats | null) => {
     return h(
         "div",
         { class: "stats" },
-        h("h2", {}, "Stats"),
+        h(
+            "h2",
+            {},
+            "Stats",
+            h(
+                "span",
+                { class: "range", role: "group", "aria-label": "Stats period" },
+                stats.windows.map((w) =>
+                    h("button", { type: "button", "data-stats-days": w.days, "aria-pressed": String(w === selected) }, `${w.days}d`),
+                ),
+            ),
+        ),
         h(
             "div",
             { class: "stats-grid" },
             h(
                 "a",
-                { class: "tile stat", href: githubSearchUrl(repo, stats.mergedSearch) },
-                h("span", { class: "tile-label" }, `Merged, last ${stats.reviewDays} days`),
-                h("span", { class: "big" }, `${stats.merged}`),
+                { class: "tile stat", href: githubSearchUrl(repo, selected.mergedSearch) },
+                h("span", { class: "tile-label" }, `Merged, ${period}`),
+                h("span", { class: "big" }, `${selected.merged}`),
             ),
             h(
                 "div",
                 { class: "tile reviews" },
-                h("span", { class: "tile-label" }, `PRs reviewed by dev, last ${stats.reviewDays} days`),
+                h("span", { class: "tile-label" }, `PRs reviewed by dev, ${period}`),
                 bars.length ? bars : h("p", { class: "muted" }, "No reviews"),
             ),
         ),
@@ -242,6 +271,7 @@ const refresh = async () => {
             location.reload();
             return;
         }
+        lastData = data;
         draw(data);
     } catch {
         // keep the current view and try again on the next tick
@@ -259,6 +289,16 @@ document.addEventListener("click", (e) => {
     const tab = e.target.closest<HTMLElement>(".tile[data-tab]");
     if (tab) {
         show(tab.dataset.tab ?? DEFAULT_TAB, true);
+    }
+    const range = e.target.closest<HTMLElement>("[data-stats-days]");
+    if (range && lastData) {
+        statsDays = Number(range.dataset.statsDays);
+        try {
+            localStorage.setItem(STATS_DAYS_KEY, String(statsDays));
+        } catch {
+            // the choice just won't survive a reload
+        }
+        draw(lastData);
     }
 });
 

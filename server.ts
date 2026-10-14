@@ -8,7 +8,7 @@ import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import type { DashboardData, Label, PrRow, RateInfo, Stats, Tab } from "./types.ts";
+import type { DashboardData, Label, PrRow, RateInfo, Stats, StatsWindow, Tab } from "./types.ts";
 
 const REPO = "owner/repo";
 const REFRESH_SECONDS = 15;
@@ -46,12 +46,12 @@ query($q: String!) {
   }
 }`;
 
-const STATS_DAYS = 7;
+const STATS_WINDOW_DAYS = [1, 7, 28];
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const CHART_DAYS = 14;
 const STATS_REFRESH_SECONDS = 300;
 const STATS_QUERY = `
-query($q: String!, $merged: String!, $after: String) {
-  merged: search(query: $merged, type: ISSUE, first: 1) { issueCount }
+query($q: String!, $after: String) {
   search(query: $q, type: ISSUE, first: 100, after: $after) {
     pageInfo { hasNextPage endCursor }
     nodes { ... on PullRequest {
@@ -107,7 +107,6 @@ type StatsPr = {
 };
 
 type StatsResult = {
-    merged: { issueCount: number };
     search: { pageInfo: { hasNextPage: boolean; endCursor: string }; nodes: (StatsPr | null)[] };
 };
 
@@ -187,53 +186,55 @@ const localDay = (date: Date) => `${date.getFullYear()}-${pad2(date.getMonth() +
 
 const clockTime = (date: Date) => `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 
+// GitHub search accepts whole-second UTC timestamps, which also compare correctly as strings against its own
+const searchTimestamp = (date: Date) => `${date.toISOString().slice(0, 19)}Z`;
+
+const windowStats = (prs: StatsPr[], days: number, now: Date): StatsWindow => {
+    const since = searchTimestamp(new Date(now.getTime() - days * MS_PER_DAY));
+    const reviewed = new Map<string, Set<number>>();
+    for (const pr of prs) {
+        for (const review of pr.reviews.nodes) {
+            const reviewer = review?.author;
+            // people only, not bots or the PR author replying on their own PR
+            if (
+                review?.submittedAt &&
+                reviewer &&
+                reviewer.__typename === "User" &&
+                reviewer.login !== pr.author?.login &&
+                review.submittedAt >= since
+            ) {
+                reviewed.set(reviewer.login, (reviewed.get(reviewer.login) ?? new Set()).add(pr.number));
+            }
+        }
+    }
+    return {
+        days,
+        merged: prs.filter((pr) => pr.mergedAt && pr.mergedAt >= since).length,
+        mergedSearch: `repo:${REPO} is:pr is:merged merged:>=${since}`,
+        reviews: [...reviewed]
+            .map(([login, numbers]) => ({ login, count: numbers.size }))
+            .sort((a, b) => b.count - a.count || compareStrings(a.login.toLowerCase(), b.login.toLowerCase())),
+    };
+};
+
 const reviewStats = async (): Promise<Stats> => {
     const now = new Date();
     const dayOffset = (offset: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
-    const reviewSince = localDay(dayOffset(-STATS_DAYS));
     const days = Array.from({ length: CHART_DAYS }, (_, i) => localDay(dayOffset(i - (CHART_DAYS - 1))));
-    const variables: Record<string, string> = {
-        q: `repo:${REPO} is:pr updated:>=${days[0]}`,
-        merged: `repo:${REPO} is:pr is:merged merged:>=${reviewSince}`,
-    };
-    const reviewed = new Map<string, Set<number>>();
+    const fetchDays = Math.max(CHART_DAYS, ...STATS_WINDOW_DAYS);
+    const variables: Record<string, string> = { q: `repo:${REPO} is:pr updated:>=${localDay(dayOffset(-fetchDays))}` };
     const prs: StatsPr[] = [];
-    let result: StatsResult;
     while (true) {
-        result = await graphql<StatsResult>(STATS_QUERY, variables);
-        for (const pr of result.search.nodes) {
-            if (!pr || typeof pr.number !== "number") {
-                continue;
-            }
-            prs.push(pr);
-            for (const review of pr.reviews.nodes) {
-                const reviewer = review?.author;
-                // people only, not bots or the PR author replying on their own PR
-                if (
-                    review?.submittedAt &&
-                    reviewer &&
-                    reviewer.__typename === "User" &&
-                    reviewer.login !== pr.author?.login &&
-                    review.submittedAt >= reviewSince
-                ) {
-                    reviewed.set(reviewer.login, (reviewed.get(reviewer.login) ?? new Set()).add(pr.number));
-                }
-            }
-        }
+        const result = await graphql<StatsResult>(STATS_QUERY, variables);
+        prs.push(...result.search.nodes.filter((pr): pr is StatsPr => typeof pr?.number === "number"));
         if (!result.search.pageInfo.hasNextPage) {
             break;
         }
         variables.after = result.search.pageInfo.endCursor;
     }
     const tally = (dates: string[]) => days.map((day) => dates.filter((date) => date === day).length);
-    const reviews = [...reviewed]
-        .map(([login, numbers]) => ({ login, count: numbers.size }))
-        .sort((a, b) => b.count - a.count || compareStrings(a.login.toLowerCase(), b.login.toLowerCase()));
     return {
-        merged: result.merged.issueCount,
-        mergedSearch: variables.merged!,
-        reviewDays: STATS_DAYS,
-        reviews,
+        windows: STATS_WINDOW_DAYS.map((windowDays) => windowStats(prs, windowDays, now)),
         days,
         series: [
             { name: "Opened", values: tally(prs.map((pr) => localDay(new Date(pr.createdAt)))) },

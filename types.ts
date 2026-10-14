@@ -30,11 +30,15 @@ export type RateInfo = { cost: number; limit: number; remaining: number; resetAt
 
 export type SeriesName = "Opened" | "Merged" | "Closed";
 
-export type Stats = {
+export type StatsWindow = {
+    days: number;
     merged: number;
     mergedSearch: string;
-    reviewDays: number;
     reviews: { login: string; count: number }[];
+};
+
+export type Stats = {
+    windows: StatsWindow[];
     days: string[];
     series: { name: SeriesName; values: number[] }[];
 };
