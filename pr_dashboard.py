@@ -118,13 +118,13 @@ def age_cell(pr):
 
 def table(prs_, kodiak=False):
     rows = "".join(
-        f'<tr data-href="{html.escape(p["url"])}"{" class=blocked" if kodiak and blocked(p) else ""}>'
+        f'<tr style="--i:{i}" data-href="{html.escape(p["url"])}"{" class=blocked" if kodiak and blocked(p) else ""}>'
         f'<td><a href="{html.escape(p["url"])}" target=_blank rel=noopener>#{p["number"]}</a></td>'
         f'<td>{html.escape(p["title"])}{"".join(map(pill, p["labels"]))}{unresolved_badge(p)}</td>'
         f'<td class=diff><span class=add>+{p["additions"]:,}</span> <span class=del>-{p["deletions"]:,}</span></td>'
         f'<td>{html.escape(p["author"]["login"])}</td>{age_cell(p)}'
         + (f'<td>{html.escape(p["kodiak"])}</td>' if kodiak else "") + "</tr>"
-        for p in prs_
+        for i, p in enumerate(prs_)
     ) or f"<tr><td colspan={6 if kodiak else 5} class=muted>None</td></tr>"
     return (
         "<table><thead><tr><th>PR</th><th>Title</th><th>Lines</th><th>Author</th><th>Opened / updated</th>"
@@ -192,6 +192,107 @@ def fetch():
         )
 
 
+STYLE = """
+:root {
+    --bg: #05070a; --panel: rgba(12, 18, 24, .72); --fg: #d6ffe9; --muted: #5f7a70; --line: #12231d;
+    --green: #00ff9c; --cyan: #00e5ff; --red: #ff3860; --amber: #ffb300; --violet: #b388ff;
+    --add: var(--green); --hot: var(--red); --c: var(--cyan);
+    color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+    background:
+        radial-gradient(ellipse at top, rgba(0, 229, 255, .08), transparent 60%),
+        linear-gradient(rgba(0, 255, 156, .035) 1px, transparent 1px) 0 0 / 32px 32px,
+        linear-gradient(90deg, rgba(0, 255, 156, .035) 1px, transparent 1px) 0 0 / 32px 32px,
+        var(--bg);
+    background-attachment: fixed;
+    color: var(--fg); font: 14px/1.5 "JetBrains Mono", ui-monospace, Consolas, monospace;
+    max-width: 1100px; margin: 0 auto; padding: 2rem 16px; min-height: 100vh;
+}
+body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 10;
+    background: repeating-linear-gradient(transparent 0 2px, rgba(0, 0, 0, .18) 2px 3px);
+}
+h1 { font-size: 1.1rem; font-weight: 700; margin: 0 0 1.5rem; letter-spacing: .02em; }
+.prompt { color: var(--green); text-shadow: 0 0 8px var(--green); }
+.dim, .muted { color: var(--muted); }
+.cursor { color: var(--green); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: .75rem; }
+.tile {
+    font: inherit; color: inherit; text-align: left; cursor: pointer; padding: .9rem;
+    background: var(--panel); backdrop-filter: blur(6px);
+    border: 1px solid var(--line); border-radius: 6px; position: relative; overflow: hidden;
+    transition: border-color .2s, box-shadow .2s, transform .2s;
+}
+.tile::before {
+    content: ""; position: absolute; inset: 0 0 auto; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--c), transparent); opacity: .5;
+}
+.tile:hover { border-color: var(--c); transform: translateY(-2px); box-shadow: 0 0 18px -6px var(--c); }
+.tile.on { border-color: var(--c); box-shadow: 0 0 24px -4px var(--c), inset 0 0 24px -12px var(--c); }
+.tile.on::before { opacity: 1; }
+.tile[data-tab=queue] { --c: var(--cyan); }
+.tile[data-tab=open] { --c: var(--violet); }
+.tile[data-tab=failing] { --c: var(--red); }
+.tile[data-tab=conflicts] { --c: var(--amber); }
+.tile[data-tab=review] { --c: var(--green); }
+.tile[data-tab=other] { --c: var(--muted); }
+.tile-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+.big {
+    display: block; font-size: 2.8rem; font-weight: 800; line-height: 1; margin-top: .4rem;
+    color: var(--c); text-shadow: 0 0 12px var(--c);
+}
+.big small { font-size: 14px; font-weight: 400; color: var(--muted); text-shadow: none; white-space: nowrap; }
+.tile.changed .big { animation: flash 1.2s ease-out; }
+@keyframes flash {
+    0% { color: #ffffff; text-shadow: 0 0 24px #ffffff, 0 0 48px var(--c); transform: scale(1.12); }
+    100% { transform: none; }
+}
+
+h2 { font-size: 1rem; margin: 2rem 0 .75rem; color: var(--fg); }
+h2::before { content: "// "; color: var(--muted); }
+.gh { font-size: 12px; font-weight: 400; margin-left: .5rem; }
+a { color: var(--cyan); text-decoration: none; }
+a:hover { text-shadow: 0 0 8px var(--cyan); }
+
+table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+th { white-space: nowrap; color: var(--muted); font-weight: 400; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+td, th { padding: .55rem .75rem; border-bottom: 1px solid var(--line); text-align: left; }
+tr:last-child td { border-bottom: 0; }
+tr[data-href] { cursor: pointer; transition: background .15s, box-shadow .15s; }
+tr[data-href]:hover { background: rgba(0, 229, 255, .06); box-shadow: inset 3px 0 0 var(--cyan); }
+tr.blocked { opacity: .5; }
+.enter tbody tr { animation: rise .35s ease-out backwards; animation-delay: calc(var(--i, 0) * 35ms); }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+
+.label { display: inline-block; font-size: 11px; padding: 0 .5em; border: 1px solid; border-radius: 3px; white-space: nowrap; }
+.unresolved { font-size: 12px; color: var(--red); white-space: nowrap; }
+.age, .diff { white-space: nowrap; color: var(--muted); }
+.add { color: var(--green); } .del { color: var(--red); }
+.err { color: var(--red); border: 1px solid var(--red); background: rgba(255, 56, 96, .08); padding: .75rem; border-radius: 6px; white-space: pre-wrap; }
+footer { margin-top: 2rem; font-size: 12px; }
+
+@property --p { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes fill { to { --p: 360deg; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+.pie {
+    position: fixed; top: 1.25rem; right: 1.25rem; width: 22px; height: 22px; border-radius: 50%; z-index: 11;
+    background: conic-gradient(var(--green) var(--p), var(--line) 0);
+    box-shadow: 0 0 12px -2px var(--green); animation: fill var(--refresh) linear forwards;
+}
+.loading .pie {
+    background: none; border: 3px solid var(--line); border-top-color: var(--green);
+    animation: spin .7s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before { animation: none !important; transition: none !important; }
+}
+"""
+
+
 def render():
     fetch()
     open_prs, failing_prs, needs_review, automerge = data or ([], [], [], [])
@@ -207,7 +308,7 @@ def render():
         ("other", "Other", [p for p in open_prs if p["number"] not in categorised], None),
     ]
     tiles = "".join(
-        f'<button class=tile data-tab={key}><span class=muted>{label}</span><span class=big>{"?" if data is None else count(key, items)}</span></button>'
+        f'<button class=tile data-tab={key}><span class=tile-label>{label}</span><span class=big>{"?" if data is None else count(key, items)}</span></button>'
         for key, label, items, _ in tabs
     )
     panels = "".join(
@@ -219,47 +320,37 @@ def render():
     return f"""<!doctype html><meta charset=utf-8>
 <title>PR Dashboard</title>
 <base target=_blank>
-<style>
-:root{{--bg:#ffffff;--fg:#1a1a1a;--muted:#6b6b6b;--line:#e2e2e2;--accent:#2563eb;--hot:#dc2626;--add:#16a34a}}
-@media (prefers-color-scheme:dark){{:root{{--bg:#111111;--fg:#eeeeee;--muted:#999999;--line:#2a2a2a;--accent:#60a5fa;--hot:#f87171;--add:#4ade80}}}}
-body{{background:var(--bg);color:var(--fg);font:16px system-ui,sans-serif;max-width:960px;margin:2rem auto;padding:0 16px}}
-.tiles{{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1rem}}
-.tile{{font:inherit;color:inherit;background:none;text-align:left;cursor:pointer;padding:.75rem;border:2px solid var(--line);border-radius:8px}}
-.tile.on{{border-color:var(--accent)}}
-.big{{display:block;font-size:3.5rem;font-weight:700;line-height:1;margin-top:.25rem}} .big small{{font-size:14px;font-weight:400;color:var(--muted);white-space:nowrap}} .muted{{color:var(--muted)}} footer{{margin-top:2rem;font-size:14px}} .err{{color:var(--hot)}}
-table{{width:100%;border-collapse:collapse}} td,th{{padding:.5rem;border-bottom:1px solid var(--line);text-align:left}} th{{color:var(--muted);font-weight:600}}
-@property --p{{syntax:"<angle>";inherits:false;initial-value:0deg}}
-@keyframes fill{{to{{--p:360deg}}}} @keyframes spin{{to{{transform:rotate(360deg)}}}}
-.pie{{position:fixed;top:1rem;right:1rem;width:20px;height:20px;border-radius:50%;
-background:conic-gradient(var(--accent) var(--p),var(--line) 0);animation:fill {REFRESH_SECONDS}s linear forwards}}
-.loading .pie{{background:none;border:3px solid var(--line);border-top-color:var(--accent);box-sizing:border-box;animation:spin .8s linear infinite}}
-tr.blocked{{opacity:.55}} tr[data-href]{{cursor:pointer}} tr[data-href]:hover{{background:var(--line)}}
-a{{color:var(--accent)}} .unresolved{{font-size:12px;color:var(--hot);white-space:nowrap}} .age,.diff{{white-space:nowrap}} .add{{color:var(--add)}} .del{{color:var(--hot)}} .label{{display:inline-block;font-size:12px;padding:0 .5em;border:1px solid;border-radius:1em;white-space:nowrap}} .gh{{font-size:.6em;font-weight:400}}
-</style>
+<link rel=preconnect href="https://fonts.gstatic.com" crossorigin>
+<link rel=stylesheet href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap">
+<style>{STYLE}</style>
 <main data-version="{VERSION}">
+<header><h1><span class=prompt>&gt;</span> {REPO}<span class=dim>/pulls</span><span class=cursor>_</span></h1></header>
 <div class=tiles>{tiles}</div>
 {f'<pre class=err>{html.escape(error)}</pre>' if error else ''}
 {panels}
 <footer class=muted>{
-    f"GitHub API: {rate['remaining']:,} / {rate['limit']:,} left, resets {reset_time():%H:%M} (each refresh costs {rate['cost']})"
+    f"[gh api] {rate['remaining']:,}/{rate['limit']:,} left &middot; resets {reset_time():%H:%M} &middot; cost {rate['cost']}/refresh"
     if rate else ""
 }</footer>
 </main>
-<div class=pie role=status title="Refreshes every {REFRESH_SECONDS}s" aria-label="Refreshes every {REFRESH_SECONDS}s"></div>
+<div class=pie style="--refresh:{REFRESH_SECONDS}s" role=status title="Refreshes every {REFRESH_SECONDS}s" aria-label="Refreshes every {REFRESH_SECONDS}s"></div>
 <script>
-const show = key => {{
+const show = (key, animate = false) => {{
     if (!document.getElementById(key)) key = "queue";
-    document.querySelectorAll("section").forEach(s => s.hidden = s.id !== key);
+    document.querySelectorAll("section").forEach(s => {{
+        s.hidden = s.id !== key;
+        s.classList.toggle("enter", animate && s.id === key);
+    }});
     document.querySelectorAll(".tile").forEach(t => t.classList.toggle("on", t.dataset.tab === key));
     history.replaceState(null, "", "#" + key);
 }};
 document.addEventListener("click", e => {{
     const tile = e.target.closest(".tile");
-    if (tile) show(tile.dataset.tab);
+    if (tile) show(tile.dataset.tab, true);
     const row = e.target.closest("tr[data-href]");
     if (row && !e.target.closest("a")) window.open(row.dataset.href, "_blank", "noopener");
 }});
-show(location.hash.slice(1));
+show(location.hash.slice(1), true);
 setInterval(() => fetch("/version").then(r => r.text()).then(v => v !== "{VERSION}" && location.reload()).catch(() => {{}}), 1000);
 // swap content in place rather than navigating, so the browser tab shows no loading state
 const pie = document.querySelector(".pie");
@@ -270,7 +361,11 @@ const refresh = async () => {{
         const main = doc.querySelector("main");
         // new code means new CSS/JS too, which a content swap would miss
         if (main.dataset.version !== "{VERSION}") return location.reload();
+        const counts = Object.fromEntries([...document.querySelectorAll(".tile")].map(t => [t.dataset.tab, t.querySelector(".big").textContent]));
         document.querySelector("main").replaceWith(main);
+        main.querySelectorAll(".tile").forEach(t => {{
+            if (counts[t.dataset.tab] !== undefined && counts[t.dataset.tab] !== t.querySelector(".big").textContent) t.classList.add("changed");
+        }});
         show(location.hash.slice(1));
     }} catch {{}}
     document.body.classList.remove("loading");
