@@ -101,7 +101,7 @@ const tile = (tab: Tab, loaded: boolean, active: string) =>
             "span",
             { class: "big" },
             loaded ? `${tab.count}` : "?",
-            loaded && tab.blocked ? [" ", h("small", {}, `(${tab.blocked} blocked)`)] : null,
+            loaded && tab.blocked ? h("small", {}, `${tab.blocked} blocked`) : null,
         ),
     );
 

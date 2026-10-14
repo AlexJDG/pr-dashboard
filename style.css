@@ -66,10 +66,11 @@ h1 { font-size: 1.1rem; font-weight: 700; margin: 0 0 1.5rem; letter-spacing: .0
 .tile[data-tab=other] { --c: var(--muted); }
 .tile-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
 .big {
-    display: block; font-size: 2.8rem; font-weight: 800; line-height: 1; margin-top: .4rem;
+    display: block; font-size: 2.8rem; font-weight: 800; line-height: 1; margin-top: .4rem; white-space: nowrap;
     color: var(--c); text-shadow: 0 0 12px var(--c);
 }
-.big small { font-size: 14px; font-weight: 400; color: var(--muted); text-shadow: none; white-space: nowrap; }
+/* a margin rather than a space, which at the big number's size is wide enough to force a wrap */
+.big small { font-size: 12px; font-weight: 400; color: var(--muted); text-shadow: none; margin-left: .4rem; }
 .tile.changed .big { animation: flash 1.2s ease-out; }
 @keyframes flash {
     0% { color: #ffffff; text-shadow: 0 0 24px #ffffff, 0 0 48px var(--c); transform: scale(1.12); }
