@@ -29,7 +29,7 @@ KODIAK_APP_ID = 29196
 # ponytail: first 100 open PRs only; paginate if the repo ever has more
 QUERY = """
 query($q: String!) {
-  rateLimit { cost remaining resetAt }
+  rateLimit { cost limit remaining resetAt }
   search(query: $q, type: ISSUE, first: 100) {
     nodes { ... on PullRequest {
       number title url createdAt mergeStateStatus mergeable reviewDecision author { login }
@@ -104,15 +104,19 @@ def count(key, items):
     return f"{len(items) - n_blocked}" + (f" <small>({n_blocked} blocked)</small>" if n_blocked else "")
 
 
-data, error, next_fetch = None, "", 0.0
+data, error, next_fetch, rate = None, "", 0.0, None
 # Stop polling until the hourly reset rather than drain the budget other gh tools share
 MIN_RATE_REMAINING = 500
 fetch_lock = threading.Lock()
 
 
+def reset_time():
+    return datetime.fromisoformat(rate["resetAt"].replace("Z", "+00:00")).astimezone()
+
+
 def fetch():
     # One GitHub query per refresh interval, shared by every open page; keeps the last good data on failure
-    global data, error, next_fetch
+    global data, error, next_fetch, rate
     with fetch_lock:
         if time.time() < next_fetch:
             return
@@ -124,9 +128,9 @@ def fetch():
             return
         error = ""
         if rate["remaining"] < MIN_RATE_REMAINING:
-            reset = datetime.fromisoformat(rate["resetAt"].replace("Z", "+00:00"))
+            reset = reset_time()
             next_fetch = reset.timestamp()
-            error = f"GitHub API budget low ({rate['remaining']} left), pausing until {reset.astimezone():%H:%M}"
+            error = f"GitHub API budget low ({rate['remaining']} left), pausing until {reset:%H:%M}"
         has_label = lambda p, name: name in labels(p)
         automerge = [p for p in prs_ if has_label(p, "automerge") and not has_label(p, "stacked")]
         data = (
@@ -168,7 +172,7 @@ body{{background:var(--bg);color:var(--fg);font:16px system-ui,sans-serif;max-wi
 .tiles{{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem}}
 .tile{{font:inherit;color:inherit;background:none;text-align:left;cursor:pointer;padding:.75rem;border:2px solid var(--line);border-radius:8px}}
 .tile.on{{border-color:var(--accent)}}
-.big{{display:block;font-size:3.5rem;font-weight:700;line-height:1;margin-top:.25rem}} .big small{{font-size:14px;font-weight:400;color:var(--muted);white-space:nowrap}} .muted{{color:var(--muted)}} .err{{color:var(--hot)}}
+.big{{display:block;font-size:3.5rem;font-weight:700;line-height:1;margin-top:.25rem}} .big small{{font-size:14px;font-weight:400;color:var(--muted);white-space:nowrap}} .muted{{color:var(--muted)}} footer{{margin-top:2rem;font-size:14px}} .err{{color:var(--hot)}}
 table{{width:100%;border-collapse:collapse}} td,th{{padding:.5rem;border-bottom:1px solid var(--line);text-align:left}} th{{color:var(--muted);font-weight:600}}
 @property --p{{syntax:"<angle>";inherits:false;initial-value:0deg}}
 @keyframes fill{{to{{--p:360deg}}}} @keyframes spin{{to{{transform:rotate(360deg)}}}}
@@ -182,6 +186,10 @@ a{{color:var(--accent)}} .label{{display:inline-block;font-size:12px;padding:0 .
 <div class=tiles>{tiles}</div>
 {f'<pre class=err>{html.escape(error)}</pre>' if error else ''}
 {panels}
+<footer class=muted>{
+    f"GitHub API: {rate['remaining']:,} / {rate['limit']:,} left, resets {reset_time():%H:%M} (each refresh costs {rate['cost']})"
+    if rate else ""
+}</footer>
 </main>
 <div class=pie role=status title="Refreshes every {REFRESH_SECONDS}s" aria-label="Refreshes every {REFRESH_SECONDS}s"></div>
 <script>
