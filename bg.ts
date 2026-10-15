@@ -18,6 +18,9 @@ const FLOOR_NEAR_DEPTH = 5;
 const FLOOR_COLUMN_SPACING = 0.06;
 const FLOOR_SECONDS_PER_ROW = 1.2;
 const MS_PER_SECOND = 1000;
+// The rain is faint, so it's drawn at half the CSS resolution and stretched, a sixteenth of the pixels on a 2x screen
+const RAIN_RESOLUTION = 0.5;
+const FLOOR_FRAME_MS = 1000 / 30;
 
 const rain = document.querySelector<HTMLCanvasElement>("canvas.rain");
 const floor = document.querySelector<HTMLCanvasElement>("canvas.floor");
@@ -26,11 +29,11 @@ const floorCtx = floor?.getContext("2d");
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let drops: number[] = [];
 let lastRainStep = 0;
+let lastFloorFrame = 0;
 let surgeUntil = 0;
 let surgeTimer: ReturnType<typeof setTimeout> | undefined;
 
-const fitToScreen = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
-    const scale = devicePixelRatio;
+const fitToScreen = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, scale: number) => {
     canvas.width = canvas.clientWidth * scale;
     canvas.height = canvas.clientHeight * scale;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
@@ -38,12 +41,12 @@ const fitToScreen = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) =
 
 const resize = () => {
     if (rain && rainCtx) {
-        fitToScreen(rain, rainCtx);
+        fitToScreen(rain, rainCtx, RAIN_RESOLUTION);
         drops = Array.from({ length: Math.ceil(rain.clientWidth / GLYPH_PX) }, () => Math.random() * -rain.clientHeight / GLYPH_PX);
         rainCtx.font = `${GLYPH_PX}px "JetBrains Mono", monospace`;
     }
     if (floor && floorCtx) {
-        fitToScreen(floor, floorCtx);
+        fitToScreen(floor, floorCtx, devicePixelRatio);
     }
 };
 
@@ -96,7 +99,8 @@ const frame = (now: number) => {
         lastRainStep = now;
         stepRain(rainCtx, rain.clientHeight);
     }
-    if (floor && floorCtx) {
+    if (floor && floorCtx && now - lastFloorFrame >= FLOOR_FRAME_MS) {
+        lastFloorFrame = now;
         drawFloor(floorCtx, floor.clientWidth, floor.clientHeight, now / MS_PER_SECOND);
     }
     if (!reduceMotion) {

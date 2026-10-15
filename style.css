@@ -1,5 +1,5 @@
 :root {
-    --bg: #05070a; --panel: rgba(12, 18, 24, .72); --fg: #d6ffe9; --muted: #5f7a70; --line: #12231d;
+    --bg: #05070a; --panel: rgba(12, 18, 24, .92); --fg: #d6ffe9; --muted: #5f7a70; --line: #12231d;
     --green: #00ff9c; --cyan: #00e5ff; --red: #ff3860; --amber: #ffb300; --violet: #b388ff; --magenta: #ff2bd6;
     --add: var(--green); --hot: var(--red); --c: var(--cyan);
     color-scheme: dark;
@@ -48,7 +48,7 @@ h1 { font-size: 1.1rem; font-weight: 700; margin: 0 0 1.5rem; letter-spacing: .0
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .75rem; }
 .tile {
     font: inherit; color: inherit; text-align: left; cursor: pointer; padding: .9rem;
-    background: var(--panel); backdrop-filter: blur(6px);
+    background: var(--panel);
     border: 1px solid var(--line); border-radius: 6px; position: relative; overflow: hidden;
     transition: border-color .2s, box-shadow .2s, transform .2s;
 }
