@@ -147,7 +147,7 @@ const statsPanel = (repo: string, stats: Stats | null) => {
             "div",
             {
                 class: "bar-row",
-                title: `${login} reviewed ${count} PR${count === 1 ? "" : "s"} in the ${period}${hasStreak ? `, ${leaderNote}` : ""}`,
+                title: `${login} reviewed ${count} PR${count === 1 ? "" : "s"} ${selected.days === 1 ? period : `in the ${period}`}${hasStreak ? `, ${leaderNote}` : ""}`,
             },
             h(
                 "span",
