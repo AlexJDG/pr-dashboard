@@ -42,6 +42,8 @@ query($q: String!, $mergedQ: String!) {
     nodes { ... on PullRequest {
       number title url createdAt updatedAt additions deletions mergeable reviewDecision author { login }
       reviewThreads(first: 100) { nodes { isResolved } }
+      latestOpinionatedReviews(first: 10) { nodes { state author { login } } }
+      reviewRequests(first: 10) { nodes { requestedReviewer { ... on User { login } } } }
       labels(first: 10) { nodes { name color } }
       commits(last: 1) { nodes { commit {
         statusCheckRollup { state }
@@ -92,6 +94,8 @@ type RawPr = {
     reviewDecision: string | null;
     author: { login: string } | null;
     reviewThreads: { nodes: ({ isResolved: boolean } | null)[] };
+    latestOpinionatedReviews: { nodes: ({ state: string; author: { login: string } | null } | null)[] };
+    reviewRequests: { nodes: ({ requestedReviewer: { login?: string } | null } | null)[] };
     labels: { nodes: (Label | null)[] };
     commits: {
         nodes: ({
@@ -194,8 +198,16 @@ const toPr = (raw: RawPr): Pr => {
         blocked: isBlockedStatus(kodiak),
         checks: commit?.statusCheckRollup?.state,
         mergeable: raw.mergeable,
-        reviewDecision: raw.reviewDecision,
+        // a re-requested review puts the PR back in the review queue, as if undecided
+        reviewDecision: raw.reviewDecision === "CHANGES_REQUESTED" && changesReRequested(raw) ? null : raw.reviewDecision,
     };
+};
+
+// Changes requested, but everyone who asked for them has since been asked to review again
+const changesReRequested = (raw: RawPr) => {
+    const requested = new Set(raw.reviewRequests.nodes.flatMap((request) => request?.requestedReviewer?.login ?? []));
+    const requesters = raw.latestOpinionatedReviews.nodes.flatMap((review) => (review?.state === "CHANGES_REQUESTED" ? (review.author?.login ?? []) : []));
+    return requesters.length > 0 && requesters.every((login) => requested.has(login));
 };
 
 const toRow = ({ checks: _checks, mergeable: _mergeable, reviewDecision: _reviewDecision, ...row }: Pr): PrRow => row;
