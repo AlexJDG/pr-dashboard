@@ -155,6 +155,22 @@ const isBlockedStatus = (kodiak: string) => kodiak.startsWith("🛑") || kodiak.
 
 const isBlocked = (pr: PrRow) => isBlockedStatus(pr.kodiak);
 
+const QUEUE_POSITION = /position=(\d+)/;
+const BLOCKED_RANK = Number.MAX_SAFE_INTEGER;
+const WAITING_RANK = BLOCKED_RANK - 1;
+
+// Kodiak's order: the PR it's merging, then queue position, then anything else waiting, then blocked
+const queueRank = (pr: PrRow) => {
+    if (isBlocked(pr)) {
+        return BLOCKED_RANK;
+    }
+    if (pr.kodiak.includes("merging PR")) {
+        return 0;
+    }
+    const position = QUEUE_POSITION.exec(pr.kodiak)?.[1];
+    return position ? Number(position) : WAITING_RANK;
+};
+
 const hasLabel = (pr: PrRow, name: string) => pr.labels.some((label) => label.name === name);
 
 const isFailing = (pr: Pr) => pr.checks === "FAILURE" || pr.checks === "ERROR" || pr.unresolved > 0;
@@ -300,10 +316,10 @@ const categorise = (prs: Pr[], me: string): Categorised => {
     const open = prs.toSorted((a, b) => compareStrings(b.updatedAt, a.updatedAt));
     const automerge = open
         .filter((pr) => hasLabel(pr, "automerge") && !hasLabel(pr, "stacked"))
-        // queued first, then mirrors Kodiak's ordering: hotfix first, then oldest
+        // hotfix first, then oldest, breaks ties where Kodiak gives no position
         .sort(
             (a, b) =>
-                Number(isBlocked(a)) - Number(isBlocked(b)) ||
+                queueRank(a) - queueRank(b) ||
                 Number(!hasLabel(a, "hotfix")) - Number(!hasLabel(b, "hotfix")) ||
                 compareStrings(a.createdAt, b.createdAt),
         );
