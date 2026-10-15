@@ -154,7 +154,7 @@ const statsPanel = (repo: string, stats: Stats | null) => {
                 { class: "bar-name" },
                 h("span", { class: "bar-login" }, login),
                 isTop
-                    ? h("span", { class: "crown", role: "img", "aria-label": hasStreak ? `Top reviewer, ${leaderNote}` : "Top reviewer" }, hasStreak ? `♛ ${leaderDays}d${leaderStreak?.capped ? "+" : ""}` : "♛")
+                    ? h("span", { class: "crown", role: "img", "aria-label": hasStreak ? `Top reviewer, ${leaderNote}` : "Top reviewer" }, hasStreak ? `♛ ${leaderDays}${leaderStreak?.capped ? "+ day" : "-day"} streak` : "♛")
                     : null,
             ),
             h("span", { class: "bar-track" }, h("span", { class: "bar", style: `width:${((count / top) * PERCENT).toFixed(1)}%;${pulseStyle(login)}` })),
