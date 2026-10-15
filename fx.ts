@@ -10,14 +10,12 @@ const TEAR_MS = 450;
 const PERCENT = 100;
 const TERMINAL_OPEN_MS = 550;
 const TERMINAL_LINE_MS = 380;
-const TERMINAL_HOLD_MS = 900;
+const TERMINAL_HOLD_MS = 6000;
 const TERMINAL_OUT_MS = 350;
 const HEX_BYTES = 8;
 const BYTE_VALUES = 256;
 const HEX_RADIX = 16;
-const MAX_TOASTS = 3;
-const TOAST_MS = 6000;
-const TOAST_OUT_MS = 500;
+const MAX_LISTED_PRS = 3;
 const TYPE_TICK_MS = 30;
 const TYPE_CHARS_PER_TICK = 2;
 
@@ -46,32 +44,43 @@ const tearScreen = () => {
     setTimeout(() => layer.remove(), TEAR_MS + TEAR_DELAY_MS);
 };
 
-const breach = (prs: MergedPr[]) => {
-    const [first] = prs;
-    if (!first) {
+const announcer = h("div", { class: "visually-hidden", "aria-live": "polite" });
+document.body.append(announcer);
+
+const breach = (prs: MergedPr[], animate: boolean) => {
+    if (prs.length === 0) {
         return;
     }
-    tearScreen();
+    document.querySelector(".breach")?.remove();
+    const listed = prs.slice(0, MAX_LISTED_PRS);
+    const lines = [
+        h("div", { class: "cmd" }, `$ git merge --ff ${listed.map((pr) => `#${pr.number}`).join(" ")}`),
+        h("div", { class: "hex" }, `0x ${randomHexBytes()}`),
+        h("div", { class: "hex" }, `0x ${randomHexBytes()}`),
+        h("div", { class: "ok" }, prs.length > 1 ? `[OK] ${prs.length} PRs merged into main` : "[OK] merged into main"),
+        ...listed.map((pr) => h("a", { class: "pr", href: pr.url, rel: "noopener", "aria-label": `#${pr.number} ${pr.title}` }, `▲ #${pr.number} ${pr.title}`)),
+        prs.length > MAX_LISTED_PRS ? h("div", { class: "hex" }, `+${prs.length - MAX_LISTED_PRS} more`) : null,
+    ].filter((line) => line !== null);
+    const output = h("div", { class: "breach-output" }, lines);
     const { x, y } = terminalOrigin();
     // Opens at the centre of the window, travelling there from the Merged tile
     const travel = `--dx:${x - innerWidth / 2}px;--dy:${y - innerHeight / 2}px`;
-    const lines = [
-        { kind: "cmd", text: `$ git merge --ff #${first.number}` },
-        { kind: "hex", text: `0x ${randomHexBytes()}` },
-        { kind: "hex", text: `0x ${randomHexBytes()}` },
-        { kind: "ok", text: prs.length > 1 ? `[OK] ${prs.length} PRs merged into main` : "[OK] merged into main" },
-    ];
-    const output = h("div", { class: "breach-output" });
-    const terminal = h("div", { class: "breach", style: travel, "aria-hidden": "true" }, h("div", { class: "breach-bar" }, "uplink"), output);
+    const terminal = h("div", { class: "breach", style: travel }, h("div", { class: "breach-bar", "aria-hidden": "true" }, "uplink"), output);
     document.body.append(terminal);
-    lines.forEach(({ kind, text }, i) =>
-        setTimeout(() => {
-            const line = h("div", { class: kind });
-            output.append(line);
-            glitchType(line, text);
-        }, TERMINAL_OPEN_MS + i * TERMINAL_LINE_MS),
-    );
-    const closeAt = TERMINAL_OPEN_MS + lines.length * TERMINAL_LINE_MS + TERMINAL_HOLD_MS;
+    announcer.textContent = prs.map((pr) => `Merged #${pr.number}: ${pr.title}`).join(". ");
+    if (animate) {
+        tearScreen();
+        // Sized to the full text first so the window doesn't grow as lines type in
+        output.style.minHeight = `${output.offsetHeight}px`;
+        lines.forEach((line) => line.classList.add("pending"));
+        lines.forEach((line, i) =>
+            setTimeout(() => {
+                line.classList.remove("pending");
+                glitchType(line, line.textContent ?? "");
+            }, TERMINAL_OPEN_MS + i * TERMINAL_LINE_MS),
+        );
+    }
+    const closeAt = (animate ? TERMINAL_OPEN_MS + lines.length * TERMINAL_LINE_MS : 0) + TERMINAL_HOLD_MS;
     setTimeout(() => terminal.classList.add("out"), closeAt);
     setTimeout(() => terminal.remove(), closeAt + TERMINAL_OUT_MS);
 };
@@ -91,58 +100,11 @@ const glitchType = (element: HTMLElement, text: string) => {
     return timer;
 };
 
-const toastStack = () => {
-    const existing = document.querySelector(".toasts");
-    if (existing) {
-        return existing;
-    }
-    const created = h("div", { class: "toasts" });
-    document.body.append(created);
-    return created;
-};
-
-const announcer = h("div", { class: "visually-hidden", "aria-live": "polite" });
-document.body.append(announcer);
-
-const dismissers = new WeakMap<Element, () => void>();
-
-const showToast = (pr: MergedPr, animate: boolean) => {
-    const head = h("b", { class: "toast-head" });
-    const title = h("span", { class: "toast-title" });
-    const plainText = `Merged #${pr.number}: ${pr.title}`;
-    head.setAttribute("aria-hidden", "true");
-    title.setAttribute("aria-hidden", "true");
-    const toast = h("a", { class: "toast", href: pr.url, rel: "noopener", "aria-label": plainText }, head, title);
-    announcer.textContent = plainText;
-    const heading = `▲ MERGED #${pr.number}`;
-    const typing = animate ? [glitchType(head, heading), glitchType(title, pr.title)] : [];
-    if (!animate) {
-        head.textContent = heading;
-        title.textContent = pr.title;
-    }
-    const stack = toastStack();
-    const outTimer = setTimeout(() => toast.classList.add("out"), TOAST_MS);
-    const removeTimer = setTimeout(() => dismiss(), TOAST_MS + TOAST_OUT_MS);
-    const dismiss = () => {
-        typing.forEach(clearInterval);
-        clearTimeout(outTimer);
-        clearTimeout(removeTimer);
-        toast.remove();
-        if (!stack.hasChildNodes()) {
-            stack.remove();
-        }
-    };
-    dismissers.set(toast, dismiss);
-    stack.append(toast);
-    [...stack.children].slice(0, -MAX_TOASTS).forEach((oldest) => dismissers.get(oldest)?.());
-};
-
 // One breach and rain surge however many merges arrive together
 export const celebrateMerges = (prs: MergedPr[]) => {
     const animate = !motionReduced();
-    prs.forEach((pr) => showToast(pr, animate));
+    breach(prs, animate);
     if (animate && prs.length > 0) {
-        breach(prs);
         surgeRain();
     }
 };
