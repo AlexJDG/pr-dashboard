@@ -54,7 +54,7 @@ const stepRain = (ctx: CanvasRenderingContext2D, height: number) => {
     // Fade old glyphs towards transparent rather than a solid colour, so the page background shows through
     ctx.globalCompositeOperation = "destination-out";
     ctx.fillStyle = `rgba(0, 0, 0, ${RAIN_FADE})`;
-    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.fillRect(0, 0, ctx.canvas.clientWidth, ctx.canvas.clientHeight);
     ctx.globalCompositeOperation = "source-over";
     drops = drops.map((row, column) => {
         const x = column * GLYPH_PX;
