@@ -50,6 +50,10 @@ const resize = () => {
     }
     if (floor && floorCtx) {
         fitToScreen(floor, floorCtx, devicePixelRatio);
+        // resizing clears the canvas, and with effects off no frame is coming to redraw it
+        if (effectsOff()) {
+            drawFloor(floorCtx, floor.clientWidth, floor.clientHeight, performance.now() / MS_PER_SECOND);
+        }
     }
 };
 
@@ -130,6 +134,7 @@ addEventListener("rain-surge", () => {
     surgeTimer = setTimeout(() => rain.classList.remove("surge"), SURGE_MS);
 });
 
-addEventListener("resize", resize);
+// watches the background layer rather than the window, as a scrollbar appearing narrows it without a resize event
+new ResizeObserver(resize).observe(document.querySelector(".bg") ?? document.body);
 resize();
 requestAnimationFrame(frame);
