@@ -85,8 +85,12 @@ h1 { font-size: 1.1rem; font-weight: 700; margin: 0 0 1.5rem; letter-spacing: .0
     100% { text-shadow: 0 0 12px var(--c); clip-path: inset(-20px); transform: none; }
 }
 
-.panels { overflow: auto; scrollbar-width: thin; scrollbar-color: var(--muted) transparent; transition: height .3s cubic-bezier(.2, .8, .2, 1); }
-.panels.resizing { overflow: hidden; }
+.panels { --table-max: none; overflow: hidden; transition: height .3s cubic-bezier(.2, .8, .2, 1); }
+/* app.ts sets --table-max to the room left in the window; the rows scroll under the sticky header */
+.table-scroll {
+    max-height: var(--table-max); overflow: auto; scrollbar-width: thin; scrollbar-color: var(--muted) transparent;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+}
 h2 { font-size: 1rem; margin: 2rem 0 .75rem; color: var(--fg); }
 h2::before { content: "// "; color: var(--muted); }
 .gh { font-size: 12px; font-weight: 400; margin-left: .5rem; }
@@ -101,7 +105,7 @@ h2::before { content: "// "; color: var(--muted); }
 a { color: var(--cyan); text-decoration: none; }
 a:hover { text-shadow: 0 0 8px var(--cyan); }
 
-table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: clip; }
+table { width: 100%; border-collapse: separate; border-spacing: 0; }
 th { position: sticky; top: 0; z-index: 1; background: var(--panel-solid); white-space: nowrap; color: var(--muted); font-weight: 400; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
 td, th { padding: .55rem .75rem; border-bottom: 1px solid var(--line); text-align: left; }
 td code { font: inherit; font-size: .9em; color: var(--fg); background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .14); border-radius: 3px; padding: 0 .3em; }
@@ -114,7 +118,8 @@ a.row:hover { text-shadow: none; }
 .row:hover .num { text-shadow: 0 0 8px var(--cyan); }
 tr.blocked { opacity: .5; }
 .enter tbody tr { animation: rise .35s ease-out backwards; animation-delay: calc(var(--i, 0) * 35ms); }
-@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+/* sideways, as a downward offset would briefly overflow the scrolling table box */
+@keyframes rise { from { opacity: 0; transform: translateX(-8px); } }
 
 .label { display: inline-block; font-size: 11px; padding: 0 .5em; border: 1px solid; border-radius: 3px; white-space: nowrap; }
 .unresolved { font-size: 12px; color: var(--red); white-space: nowrap; }

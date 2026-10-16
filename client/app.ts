@@ -16,7 +16,7 @@ const TOOLTIP_OFFSET = 12;
 const DEFAULT_REFRESH_SECONDS = 15;
 const DATA_TIMEOUT_MS = 60 * 1000;
 const DEFAULT_STATS_DAYS = 7;
-const MIN_PANEL_PX = 240;
+const MIN_TABLE_PX = 240;
 const STATS_DAYS_KEY = "statsDays";
 const MIN_STREAK_DAYS = 2;
 const NO_VALUE = "-";
@@ -86,19 +86,23 @@ const table = (tab: Tab) => {
         ? tab.prs.map((pr, i) => tableRow(pr, i, kodiak))
         : [h("tr", {}, h("td", { colspan: kodiak ? 6 : 5, class: "muted" }, "None"))];
     return h(
-        "table",
-        {},
+        "div",
+        { class: "table-scroll" },
         h(
-            "thead",
+            "table",
             {},
             h(
-                "tr",
+                "thead",
                 {},
-                ["PR", "Title", "Lines", "Author", "Opened / updated"].map((heading) => h("th", {}, heading)),
-                kodiak ? h("th", {}, "Kodiak") : null,
+                h(
+                    "tr",
+                    {},
+                    ["PR", "Title", "Lines", "Author", "Opened / updated"].map((heading) => h("th", {}, heading)),
+                    kodiak ? h("th", {}, "Kodiak") : null,
+                ),
             ),
+            h("tbody", {}, rows),
         ),
-        h("tbody", {}, rows),
     );
 };
 
@@ -240,7 +244,6 @@ const animateHeight = (element: HTMLElement, from: number) => {
     if (from === 0 || from === to || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
         return;
     }
-    element.classList.add("resizing");
     element.style.height = `${from}px`;
     void element.offsetHeight; // commit the start height before transitioning
     element.style.height = `${to}px`;
@@ -249,22 +252,22 @@ const animateHeight = (element: HTMLElement, from: number) => {
             return;
         }
         element.style.height = "";
-        element.classList.remove("resizing");
         element.removeEventListener("transitionend", done);
     };
     element.addEventListener("transitionend", done);
 };
 
-// Caps the PR panel to the room left in the window, so the page itself only scrolls once that's under MIN_PANEL_PX
+// Caps the PR table to the room left in the window, so the page itself only scrolls once that's under MIN_TABLE_PX
 const fitPanels = () => {
     const panels = document.querySelector<HTMLElement>(".panels");
+    const shown = document.querySelector<HTMLElement>("section:not([hidden]) .table-scroll");
     const main = document.querySelector("main");
-    if (!panels || !main) {
+    if (!panels || !shown || !main) {
         return;
     }
     const contentBottom = main.getBoundingClientRect().bottom + scrollY + parseFloat(getComputedStyle(document.body).paddingBottom);
-    const room = innerHeight - (contentBottom - panels.offsetHeight);
-    panels.style.maxHeight = `${Math.max(MIN_PANEL_PX, room)}px`;
+    const room = innerHeight - (contentBottom - shown.offsetHeight);
+    panels.style.setProperty("--table-max", `${Math.max(MIN_TABLE_PX, room)}px`);
 };
 
 // main is replaced on every redraw, so draw() points this at each new one
@@ -284,8 +287,8 @@ const show = (requested: string, animate = false) => {
     });
     document.querySelectorAll<HTMLElement>(".tile[data-tab]").forEach((t) => t.classList.toggle("on", t.dataset.tab === key));
     history.replaceState(null, "", `#${key}`);
+    fitPanels();
     if (animate) {
-        panels.scrollTop = 0;
         animateHeight(panels, from);
     }
 };
@@ -300,10 +303,9 @@ const draw = (data: DashboardData) => {
     const heightOf = (selector: string) => document.querySelector<HTMLElement>(selector)?.offsetHeight ?? 0;
     const panelsFrom = heightOf(".panels");
     const statsFrom = heightOf(".stats-grid");
-    const scrolled = document.querySelector(".panels")?.scrollTop ?? 0;
+    const scrolled = document.querySelector("section:not([hidden]) .table-scroll")?.scrollTop ?? 0;
     const main = renderMain(data);
     document.querySelector("main")?.replaceWith(main);
-    fitPanels();
     panelFitter.disconnect();
     panelFitter.observe(main);
     main.querySelectorAll<HTMLElement>(".tile[data-tab]").forEach((t) => {
@@ -313,7 +315,7 @@ const draw = (data: DashboardData) => {
         }
     });
     show(location.hash.slice(1), !hasRendered);
-    main.querySelector(".panels")?.scrollTo({ top: scrolled });
+    main.querySelector("section:not([hidden]) .table-scroll")?.scrollTo({ top: scrolled });
     // Rows or reviewers coming and going resize these, so ease them to their new height
     if (hasRendered) {
         const resized: [string, number][] = [
