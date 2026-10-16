@@ -23,8 +23,10 @@ RESTART_EXIT_CODE=75
 
 open_page() {
   # Chromium-based browsers open it as a standalone app window in the given profile; others get a normal tab
-  case "$(basename "$BROWSER" .exe)" in
-    chrome | chromium* | msedge | brave) "$BROWSER" --profile-directory="$PROFILE" --app="$URL" ;;
+  local name
+  name="$(basename "$BROWSER" .exe)"
+  case "${name,,}" in
+    *chrome* | *chromium* | *msedge* | *brave*) "$BROWSER" --profile-directory="$PROFILE" --app="$URL" ;;
     *) "$BROWSER" "$URL" ;;
   esac
 }
