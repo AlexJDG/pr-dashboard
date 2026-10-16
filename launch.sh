@@ -1,15 +1,33 @@
 #!/usr/bin/env bash
-# Start the dashboard server and open it in a Chrome app window; the server exits once the window has been closed a while.
+# Start the dashboard server and open it in the browser; the server exits once the page has been closed a while.
 set -euo pipefail
+
+cd "$(dirname "$0")"
+
+# Pick up PR_DASHBOARD_* settings from .env, without overriding any already set in the environment
+if [ -f .env ]; then
+  while IFS="=" read -r key value || [ -n "$key" ]; do
+    value="${value%\"}"; value="${value#\"}"
+    if [[ $key == PR_DASHBOARD_* && -z "${!key:-}" ]]; then
+      export "$key=$value"
+    fi
+  done < .env
+fi
 
 PORT="${1:-8765}"
 URL="http://localhost:$PORT"
-CHROME="/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"
-PROFILE="Default"
-# The server exits with this code after server.ts changes, asking to be started again
+BROWSER="${PR_DASHBOARD_BROWSER:-/mnt/c/Program Files/Google/Chrome/Application/chrome.exe}"
+PROFILE="${PR_DASHBOARD_BROWSER_PROFILE:-Default}"
+# The server exits with this code after a server file changes, asking to be started again
 RESTART_EXIT_CODE=75
 
-cd "$(dirname "$0")"
+open_page() {
+  # Chromium-based browsers open it as a standalone app window in the given profile; others get a normal tab
+  case "$(basename "$BROWSER" .exe)" in
+    chrome | chromium* | msedge | brave) "$BROWSER" --profile-directory="$PROFILE" --app="$URL" ;;
+    *) "$BROWSER" "$URL" ;;
+  esac
+}
 
 # The shortcut runs a non-interactive shell, which skips nvm in ~/.bashrc and would find the system Node
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
@@ -20,7 +38,7 @@ if [ -s "$HOME/.nvm/nvm.sh" ]; then
 fi
 
 if curl -sf "$URL/version" >/dev/null; then
-  "$CHROME" --profile-directory="$PROFILE" --app="$URL"
+  open_page
   exit
 fi
 
@@ -36,6 +54,6 @@ run_server() {
 run_server &
 server=$!
 until curl -sf "$URL/version" >/dev/null; do sleep 0.2; done
-"$CHROME" --profile-directory="$PROFILE" --app="$URL"
-# Chrome hands off to its running instance and returns, so stay alive on the server instead
+open_page
+# Browsers usually hand off to their running instance and return, so stay alive on the server instead
 wait "$server"

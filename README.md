@@ -28,6 +28,8 @@ Read from the environment, or from `.env` at the repo root:
 | `PR_DASHBOARD_REPO` | The repo to watch, as `owner/name`. Required. |
 | `IDLE_EXIT_SECONDS` | Stop the server once no page has polled for this long. Off by default. |
 | `SELF_RESTART` | `1` to exit with code 75 when a server file changes, for a wrapper to restart it. |
+| `PR_DASHBOARD_BROWSER` | Browser executable for `launch.sh`. Defaults to Chrome's Windows install, seen from WSL. |
+| `PR_DASHBOARD_BROWSER_PROFILE` | Browser profile for `launch.sh` to open in, for Chromium-based browsers. Defaults to `Default`. |
 
 ## The repo's conventions
 
@@ -49,4 +51,8 @@ Each 15 second refresh costs about 7 GraphQL points, and stats (refreshed every 
 
 ## Launching from Windows (WSL)
 
-`launch.sh` starts the server if it isn't already running and opens it in a Chrome app window. It assumes Chrome's default Windows install path; edit `CHROME` at the top if yours differs.
+`launch.sh` starts the server if it isn't already running and opens the page in `PR_DASHBOARD_BROWSER`. Chrome, Edge, Brave and Chromium open it as a standalone app window in `PR_DASHBOARD_BROWSER_PROFILE`; any other browser opens it in a normal tab. For example, for Edge:
+
+```sh
+PR_DASHBOARD_BROWSER=/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe
+```
