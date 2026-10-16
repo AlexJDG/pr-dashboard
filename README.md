@@ -13,7 +13,7 @@ It talks to GitHub through your own `gh` CLI login, so there are no tokens to co
 
 ```sh
 npm install
-echo "PR_DASHBOARD_REPO=owner/name" > .env
+cp .env.example .env   # then set PR_DASHBOARD_REPO
 npm start
 ```
 
