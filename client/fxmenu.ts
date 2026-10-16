@@ -4,6 +4,28 @@ import { celebrateMerges, surgeRain } from "./fx.ts";
 import type { DashboardData, MergedPr } from "../shared/types.ts";
 
 const GITHUB_URL = "https://github.com";
+const FX_OFF_KEY = "fxOff";
+
+const storedFxOff = () => {
+    try {
+        return localStorage.getItem(FX_OFF_KEY) === "1";
+    } catch {
+        return false;
+    }
+};
+
+// Pauses the continuous effects; style.css and bg.ts read the class, and bg.ts restarts on the event
+const setFxOff = (off: boolean) => {
+    document.documentElement.classList.toggle("fx-off", off);
+    try {
+        localStorage.setItem(FX_OFF_KEY, off ? "1" : "0");
+    } catch {
+        // the choice just won't survive a reload
+    }
+    dispatchEvent(new CustomEvent("fx-change"));
+};
+
+document.documentElement.classList.toggle("fx-off", storedFxOff());
 
 const latestMerge = (data: DashboardData | null): MergedPr =>
     data?.recentMerges.toSorted((a, b) => b.mergedAt.localeCompare(a.mergedAt))[0] ?? {
@@ -30,7 +52,13 @@ export const mountFxMenu = (loadedData: () => DashboardData | null) => {
     ];
     const toggle = h("button", { type: "button", class: "fx-toggle", "aria-expanded": "false", "aria-controls": "fx-menu", "aria-label": "fx effects menu" }, "fx");
     const buttons = actions.map(([label]) => h("button", { type: "button" }, label));
-    const menu = h("div", { id: "fx-menu", class: "fx-menu", hidden: true }, buttons);
+    const fxOffButton = h("button", { type: "button", "aria-pressed": String(storedFxOff()) }, "FX off");
+    fxOffButton.addEventListener("click", () => {
+        const off = !document.documentElement.classList.contains("fx-off");
+        setFxOff(off);
+        fxOffButton.setAttribute("aria-pressed", String(off));
+    });
+    const menu = h("div", { id: "fx-menu", class: "fx-menu", hidden: true }, fxOffButton, buttons);
     const root = h("div", { class: "fx-root" }, toggle, menu);
     let isOpen = false;
     const setOpen = (open: boolean) => {

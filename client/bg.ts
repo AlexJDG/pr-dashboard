@@ -28,6 +28,8 @@ const floor = document.querySelector<HTMLCanvasElement>("canvas.floor");
 const rainCtx = rain?.getContext("2d", { willReadFrequently: true });
 const floorCtx = floor?.getContext("2d", { willReadFrequently: true });
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const effectsOff = () => document.documentElement.classList.contains("fx-off");
+let animating = false;
 let drops: number[] = [];
 let lastRainStep = 0;
 let lastFloorFrame = 0;
@@ -104,10 +106,19 @@ const frame = (now: number) => {
         lastFloorFrame = now;
         drawFloor(floorCtx, floor.clientWidth, floor.clientHeight, now / MS_PER_SECOND);
     }
-    if (!reduceMotion) {
+    // with effects off the last frame stays on screen as a still image
+    animating = !reduceMotion && !effectsOff();
+    if (animating) {
         requestAnimationFrame(frame);
     }
 };
+
+addEventListener("fx-change", () => {
+    if (!animating && !reduceMotion && !effectsOff()) {
+        animating = true;
+        requestAnimationFrame(frame);
+    }
+});
 
 addEventListener("rain-surge", () => {
     if (!rain || reduceMotion) {

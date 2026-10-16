@@ -278,3 +278,9 @@ details table { margin-top: .5rem; }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* FX off in the fx menu: the canvases stop redrawing (bg.ts) and the continuous animations hold still */
+:root.fx-off .beam { display: none; }
+:root.fx-off .bg::before, :root.fx-off .bg::after, :root.fx-off .bar::after, :root.fx-off .chart-layer, :root.fx-off .flow, :root.fx-off .cursor {
+    animation-play-state: paused;
+}
