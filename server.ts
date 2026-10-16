@@ -58,6 +58,8 @@ const CHART_DAYS = 14;
 // The longest window plus as many days again, so a leader streak on that window has history to draw on
 const STATS_FETCH_DAYS = Math.max(...STATS_WINDOW_DAYS) * 2;
 const SEARCH_RESULT_CAP = 1000;
+// Fetched in slices of this many days so no single search reaches the result cap
+const STATS_SLICE_DAYS = 14;
 const STATS_REFRESH_SECONDS = 300;
 const STATS_QUERY = `
 query($q: String!, $after: String) {
@@ -283,11 +285,8 @@ const windowStats = (prs: StatsPr[], days: number, now: Date, datedReviews: Date
     };
 };
 
-const reviewStats = async (): Promise<Stats> => {
-    const now = new Date();
-    const dayOffset = (offset: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
-    const days = Array.from({ length: CHART_DAYS }, (_, i) => localDay(dayOffset(i - (CHART_DAYS - 1))));
-    const variables: Record<string, string> = { q: `repo:${REPO} is:pr updated:>=${localDay(dayOffset(-STATS_FETCH_DAYS))}` };
+const searchAllPages = async (q: string) => {
+    const variables: Record<string, string> = { q };
     const prs: StatsPr[] = [];
     let issueCount = 0;
     while (true) {
@@ -300,8 +299,27 @@ const reviewStats = async (): Promise<Stats> => {
         variables.after = result.search.pageInfo.endCursor;
     }
     if (issueCount > prs.length) {
-        throw new Error(`Stats cover ${prs.length} of ${issueCount} PRs, past GitHub search's ${SEARCH_RESULT_CAP} result cap`);
+        throw new Error(`Stats search "${q}" got ${prs.length} of ${issueCount} PRs, past GitHub search's ${SEARCH_RESULT_CAP} result cap`);
     }
+    return prs;
+};
+
+const reviewStats = async (): Promise<Stats> => {
+    const now = new Date();
+    const dayOffset = (offset: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+    const days = Array.from({ length: CHART_DAYS }, (_, i) => localDay(dayOffset(i - (CHART_DAYS - 1))));
+    // the newest slice is open-ended so nothing updated today is missed
+    const ranges = Array.from({ length: Math.ceil(STATS_FETCH_DAYS / STATS_SLICE_DAYS) }, (_, i) => {
+        const from = localDay(dayOffset(-STATS_FETCH_DAYS + i * STATS_SLICE_DAYS));
+        const to = localDay(dayOffset(-STATS_FETCH_DAYS + (i + 1) * STATS_SLICE_DAYS - 1));
+        return (i + 1) * STATS_SLICE_DAYS >= STATS_FETCH_DAYS ? `>=${from}` : `${from}..${to}`;
+    });
+    // keyed by number, as a PR updated mid-fetch can move into a later slice
+    const byNumber = new Map<number, StatsPr>();
+    for (const range of ranges) {
+        (await searchAllPages(`repo:${REPO} is:pr updated:${range}`)).forEach((pr) => byNumber.set(pr.number, pr));
+    }
+    const prs = [...byNumber.values()];
     const datedReviews = prs.flatMap((pr) =>
         countedReviews(pr).map(({ login, submittedAt }) => ({ login, prNumber: pr.number, day: localDay(new Date(submittedAt)) })),
     );
