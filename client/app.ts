@@ -16,6 +16,7 @@ const TOOLTIP_OFFSET = 12;
 const DEFAULT_REFRESH_SECONDS = 15;
 const DATA_TIMEOUT_MS = 60 * 1000;
 const DEFAULT_STATS_DAYS = 7;
+const MIN_PANEL_PX = 240;
 const STATS_DAYS_KEY = "statsDays";
 const MIN_STREAK_DAYS = 2;
 const NO_VALUE = "-";
@@ -233,10 +234,13 @@ const renderMain = (data: DashboardData) =>
 
 // Transitions an element from its old height to its new one; its CSS supplies the height transition
 const animateHeight = (element: HTMLElement, from: number) => {
-    const to = element.scrollHeight;
+    element.style.height = "";
+    // measured with the height unset, so any max-height still applies
+    const to = element.offsetHeight;
     if (from === 0 || from === to || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
         return;
     }
+    element.classList.add("resizing");
     element.style.height = `${from}px`;
     void element.offsetHeight; // commit the start height before transitioning
     element.style.height = `${to}px`;
@@ -245,10 +249,27 @@ const animateHeight = (element: HTMLElement, from: number) => {
             return;
         }
         element.style.height = "";
+        element.classList.remove("resizing");
         element.removeEventListener("transitionend", done);
     };
     element.addEventListener("transitionend", done);
 };
+
+// Caps the PR panel to the room left in the window, so the page itself only scrolls once that's under MIN_PANEL_PX
+const fitPanels = () => {
+    const panels = document.querySelector<HTMLElement>(".panels");
+    const main = document.querySelector("main");
+    if (!panels || !main) {
+        return;
+    }
+    const contentBottom = main.getBoundingClientRect().bottom + scrollY + parseFloat(getComputedStyle(document.body).paddingBottom);
+    const room = innerHeight - (contentBottom - panels.offsetHeight);
+    panels.style.maxHeight = `${Math.max(MIN_PANEL_PX, room)}px`;
+};
+
+// main is replaced on every redraw, so draw() points this at each new one
+const panelFitter = new ResizeObserver(fitPanels);
+addEventListener("resize", fitPanels);
 
 const show = (requested: string, animate = false) => {
     const panels = document.querySelector<HTMLElement>(".panels");
@@ -264,6 +285,7 @@ const show = (requested: string, animate = false) => {
     document.querySelectorAll<HTMLElement>(".tile[data-tab]").forEach((t) => t.classList.toggle("on", t.dataset.tab === key));
     history.replaceState(null, "", `#${key}`);
     if (animate) {
+        panels.scrollTop = 0;
         animateHeight(panels, from);
     }
 };
@@ -278,8 +300,12 @@ const draw = (data: DashboardData) => {
     const heightOf = (selector: string) => document.querySelector<HTMLElement>(selector)?.offsetHeight ?? 0;
     const panelsFrom = heightOf(".panels");
     const statsFrom = heightOf(".stats-grid");
+    const scrolled = document.querySelector(".panels")?.scrollTop ?? 0;
     const main = renderMain(data);
     document.querySelector("main")?.replaceWith(main);
+    fitPanels();
+    panelFitter.disconnect();
+    panelFitter.observe(main);
     main.querySelectorAll<HTMLElement>(".tile[data-tab]").forEach((t) => {
         const before = previous[t.dataset.tab ?? ""];
         if (before !== undefined && before !== t.querySelector(".big")?.textContent) {
@@ -287,6 +313,7 @@ const draw = (data: DashboardData) => {
         }
     });
     show(location.hash.slice(1), !hasRendered);
+    main.querySelector(".panels")?.scrollTo({ top: scrolled });
     // Rows or reviewers coming and going resize these, so ease them to their new height
     if (hasRendered) {
         const resized: [string, number][] = [
