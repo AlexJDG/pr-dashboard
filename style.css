@@ -103,6 +103,7 @@ a:hover { text-shadow: 0 0 8px var(--cyan); }
 table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 th { white-space: nowrap; color: var(--muted); font-weight: 400; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
 td, th { padding: .55rem .75rem; border-bottom: 1px solid var(--line); text-align: left; }
+td code { font: inherit; font-size: .9em; color: var(--cyan); background: rgba(0, 229, 255, .08); border: 1px solid rgba(0, 229, 255, .25); border-radius: 3px; padding: 0 .3em; }
 tbody > :last-child td { border-bottom: 0; }
 a.row { display: contents; color: inherit; }
 a.row:hover { text-shadow: none; }
