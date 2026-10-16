@@ -70,7 +70,7 @@ const CHART_DAYS = 14;
 // The longest window plus as many days again, so a leader streak on that window has history to draw on
 const STATS_FETCH_DAYS = Math.max(...STATS_WINDOW_DAYS) * 2;
 const SEARCH_RESULT_CAP = 1000;
-// Fetched in slices of this many days so no single search reaches the result cap
+// Fetched in slices of this many days, halved further wherever a slice still reaches the result cap
 const STATS_SLICE_DAYS = 14;
 const STATS_REFRESH_SECONDS = 300;
 const STATS_QUERY = `
@@ -297,39 +297,49 @@ const windowStats = (prs: StatsPr[], days: number, now: Date, datedReviews: Date
     };
 };
 
-const searchAllPages = async (q: string) => {
-    const variables: Record<string, string> = { q };
+const MIN_SPLIT_MS = 60 * MS_PER_SECOND;
+
+// Pages through PRs updated in a time range (open-ended when `to` is null, so nothing updated just now is missed),
+// halving the range and retrying whenever it matches more than GitHub search will return
+const searchUpdated = async (from: Date, to: Date | null): Promise<StatsPr[]> => {
+    const range = to === null ? `>=${searchTimestamp(from)}` : `${searchTimestamp(from)}..${searchTimestamp(to)}`;
+    const variables: Record<string, string> = { q: `repo:${REPO} is:pr updated:${range}` };
     const prs: StatsPr[] = [];
-    let issueCount = 0;
     while (true) {
         const result = await graphql<StatsResult>(STATS_QUERY, variables);
-        issueCount = result.search.issueCount;
-        prs.push(...result.search.nodes.filter((pr): pr is StatsPr => typeof pr?.number === "number"));
-        if (!result.search.pageInfo.hasNextPage) {
-            break;
+        const { issueCount, pageInfo, nodes } = result.search;
+        if (issueCount > SEARCH_RESULT_CAP) {
+            const end = (to ?? new Date()).getTime();
+            if (end - from.getTime() < MIN_SPLIT_MS) {
+                throw new Error(`More than ${SEARCH_RESULT_CAP} PRs were updated around ${searchTimestamp(from)}, past GitHub search's result cap`);
+            }
+            const middle = new Date((from.getTime() + end) / 2);
+            // ranges include both ends to the second, so the second half starts a second later
+            return [...(await searchUpdated(from, middle)), ...(await searchUpdated(new Date(middle.getTime() + MS_PER_SECOND), to))];
         }
-        variables.after = result.search.pageInfo.endCursor;
+        prs.push(...nodes.filter((pr): pr is StatsPr => typeof pr?.number === "number"));
+        if (!pageInfo.hasNextPage) {
+            return prs;
+        }
+        variables.after = pageInfo.endCursor;
     }
-    if (issueCount > prs.length) {
-        throw new Error(`Stats search "${q}" got ${prs.length} of ${issueCount} PRs, past GitHub search's ${SEARCH_RESULT_CAP} result cap`);
-    }
-    return prs;
 };
 
 const reviewStats = async (): Promise<Stats> => {
     const now = new Date();
     const dayOffset = (offset: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
     const days = Array.from({ length: CHART_DAYS }, (_, i) => localDay(dayOffset(i - (CHART_DAYS - 1))));
-    // the newest slice is open-ended so nothing updated today is missed
-    const ranges = Array.from({ length: Math.ceil(STATS_FETCH_DAYS / STATS_SLICE_DAYS) }, (_, i) => {
-        const from = localDay(dayOffset(-STATS_FETCH_DAYS + i * STATS_SLICE_DAYS));
-        const to = localDay(dayOffset(-STATS_FETCH_DAYS + (i + 1) * STATS_SLICE_DAYS - 1));
-        return (i + 1) * STATS_SLICE_DAYS >= STATS_FETCH_DAYS ? `>=${from}` : `${from}..${to}`;
+    const sliceCount = Math.ceil(STATS_FETCH_DAYS / STATS_SLICE_DAYS);
+    // consecutive slices from local midnight STATS_FETCH_DAYS ago, ending a second before the next one starts
+    const slices = Array.from({ length: sliceCount }, (_, i) => {
+        const from = dayOffset(-STATS_FETCH_DAYS + i * STATS_SLICE_DAYS);
+        const next = dayOffset(-STATS_FETCH_DAYS + (i + 1) * STATS_SLICE_DAYS);
+        return { from, to: i === sliceCount - 1 ? null : new Date(next.getTime() - MS_PER_SECOND) };
     });
     // keyed by number, as a PR updated mid-fetch can move into a later slice
     const byNumber = new Map<number, StatsPr>();
-    for (const range of ranges) {
-        (await searchAllPages(`repo:${REPO} is:pr updated:${range}`)).forEach((pr) => byNumber.set(pr.number, pr));
+    for (const { from, to } of slices) {
+        (await searchUpdated(from, to)).forEach((pr) => byNumber.set(pr.number, pr));
     }
     const prs = [...byNumber.values()];
     const datedReviews = prs.flatMap((pr) =>
