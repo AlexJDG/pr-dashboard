@@ -9,11 +9,11 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import { type DatedReview, leaderStreaks, localDay, pad2 } from "./leaders.ts";
-import type { DashboardData, Label, MergedPr, PrRow, RateInfo, Stats, StatsWindow, Tab } from "./types.ts";
+import type { DashboardData, Label, MergedPr, PrRow, RateInfo, Stats, StatsWindow, Tab } from "../shared/types.ts";
 
-// Local settings live in a gitignored .env beside this file; see README.md
+// Local settings live in a gitignored .env at the repo root; see README.md
 try {
-    process.loadEnvFile(fileURLToPath(new URL(".env", import.meta.url)));
+    process.loadEnvFile(fileURLToPath(new URL("../.env", import.meta.url)));
 } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
         throw error;
@@ -28,7 +28,7 @@ const REFRESH_SECONDS = 15;
 const DEFAULT_PORT = 8765;
 const PORT = Number(process.argv[2] ?? DEFAULT_PORT);
 const MS_PER_SECOND = 1000;
-const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const CLIENT_DIR = fileURLToPath(new URL("../client/", import.meta.url));
 const START_TIME = Date.now();
 // Exit once no page has polled for this long; > 60s because Chrome throttles hidden pages' timers to once a minute
 const IDLE_EXIT_SECONDS = Number(process.env.IDLE_EXIT_SECONDS ?? 0);
@@ -36,7 +36,7 @@ const IDLE_CHECK_SECONDS = 5;
 const SELF_RESTART = process.env.SELF_RESTART === "1";
 const SELF_RESTART_EXIT_CODE = 75;
 const SELF_RESTART_POLL_MS = 1000;
-const SERVER_FILES = ["server.ts", "leaders.ts", "types.ts"].map((file) => fileURLToPath(new URL(file, import.meta.url)));
+const SERVER_FILES = ["server.ts", "leaders.ts", "../shared/types.ts"].map((file) => fileURLToPath(new URL(file, import.meta.url)));
 const MAX_BUFFER = 64 * 1024 * 1024;
 const GH_TIMEOUT_MS = 30 * 1000;
 
@@ -491,7 +491,7 @@ const buildTabs = (): Tab[] => {
 const CLIENT_FILES = new Map([
     ["/", { file: "index.html", type: "text/html; charset=utf-8", strip: false }],
     ["/style.css", { file: "style.css", type: "text/css; charset=utf-8", strip: false }],
-    ...["app.ts", "bg.ts", "boot.ts", "chart.ts", "dom.ts", "format.ts", "fx.ts", "fxmenu.ts", "glyphs.ts", "types.ts"].map(
+    ...["app.ts", "bg.ts", "boot.ts", "chart.ts", "dom.ts", "format.ts", "fx.ts", "fxmenu.ts", "glyphs.ts"].map(
         (file) => [`/${file}`, { file, type: "text/javascript; charset=utf-8", strip: true }] as const,
     ),
 ]);
@@ -499,7 +499,7 @@ const CLIENT_FILES = new Map([
 const clientVersion = () => {
     const mtimes = [...CLIENT_FILES.values()].flatMap(({ file }) => {
         try {
-            return [statSync(path.join(ROOT, file)).mtimeMs];
+            return [statSync(path.join(CLIENT_DIR, file)).mtimeMs];
         } catch {
             return []; // mid-save
         }
@@ -549,7 +549,7 @@ const server = createServer(async (req, res) => {
             if (!client) {
                 send(404, "text/plain; charset=utf-8", "Not found");
             } else {
-                const source = readFileSync(path.join(ROOT, client.file), "utf8");
+                const source = readFileSync(path.join(CLIENT_DIR, client.file), "utf8");
                 send(200, client.type, client.strip ? stripTypeScriptTypes(source) : withVersion(source, pathname));
             }
         }

@@ -4,7 +4,7 @@ import { h, pulseStyle } from "./dom.ts";
 import { ago, clockTime, compactDuration, quotePlus } from "./format.ts";
 import { celebrateMerges } from "./fx.ts";
 import { mountFxMenu } from "./fxmenu.ts";
-import type { DashboardData, Label, PrRow, Stats, Tab } from "./types.ts";
+import type { DashboardData, Label, PrRow, Stats, Tab } from "../shared/types.ts";
 
 const MS_PER_SECOND = 1000;
 const VERSION_POLL_MS = 1000;

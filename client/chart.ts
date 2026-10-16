@@ -1,6 +1,6 @@
 import { h, pulseStyle, svg } from "./dom.ts";
 import { dayMonth, weekdayDayMonth } from "./format.ts";
-import type { SeriesName, Stats } from "./types.ts";
+import type { SeriesName, Stats } from "../shared/types.ts";
 
 const SERIES_CLASS: Record<SeriesName, string> = { Opened: "s-opened", Merged: "s-merged", Closed: "s-closed" };
 export const CHART_W = 1000;

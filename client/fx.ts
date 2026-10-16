@@ -1,6 +1,6 @@
 import { h } from "./dom.ts";
 import { randomGlyph } from "./glyphs.ts";
-import type { MergedPr } from "./types.ts";
+import type { MergedPr } from "../shared/types.ts";
 
 const TEAR_COUNT = 5;
 const TEAR_MIN_PX = 3;

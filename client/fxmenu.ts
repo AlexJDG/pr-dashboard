@@ -1,7 +1,7 @@
 import { startBoot } from "./boot.ts";
 import { h } from "./dom.ts";
 import { celebrateMerges, surgeRain } from "./fx.ts";
-import type { DashboardData, MergedPr } from "./types.ts";
+import type { DashboardData, MergedPr } from "../shared/types.ts";
 
 const GITHUB_URL = "https://github.com";
 

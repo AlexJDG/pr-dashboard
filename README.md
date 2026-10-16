@@ -17,17 +17,17 @@ echo "PR_DASHBOARD_REPO=owner/name" > .env
 npm start
 ```
 
-Then open <http://localhost:8765>. Pass a different port as an argument: `node server.ts 9000`.
+Then open <http://localhost:8765>. Pass a different port as an argument: `node server/server.ts 9000`.
 
 ## Settings
 
-Read from the environment, or from `.env` beside `server.ts`:
+Read from the environment, or from `.env` at the repo root:
 
 | Variable | Meaning |
 | --- | --- |
 | `PR_DASHBOARD_REPO` | The repo to watch, as `owner/name`. Required. |
 | `IDLE_EXIT_SECONDS` | Stop the server once no page has polled for this long. Off by default. |
-| `SELF_RESTART` | `1` to exit with code 75 when `server.ts` changes, for a wrapper to restart it. |
+| `SELF_RESTART` | `1` to exit with code 75 when a server file changes, for a wrapper to restart it. |
 
 ## The repo's conventions
 
@@ -40,6 +40,12 @@ Some tabs assume a particular workflow:
 ## API budget
 
 Each 15 second refresh costs about 7 GraphQL points, and stats (refreshed every 5 minutes, or straight after a merge) about 12. GitHub allows 5,000 an hour, shared with everything else using your `gh` login; the dashboard pauses until the reset if fewer than 500 remain.
+
+## Layout
+
+- `client/`: the page, served as-is apart from TypeScript types being stripped (no build step)
+- `server/`: the HTTP server and GitHub queries
+- `shared/`: types used by both
 
 ## Launching from Windows (WSL)
 

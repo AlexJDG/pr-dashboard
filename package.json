@@ -6,8 +6,8 @@
         "node": ">=24"
     },
     "scripts": {
-        "start": "node server.ts",
-        "dev": "node --watch server.ts",
+        "start": "node server/server.ts",
+        "dev": "node --watch server/server.ts",
         "check": "tsc"
     },
     "devDependencies": {

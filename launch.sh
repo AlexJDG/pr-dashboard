@@ -28,7 +28,7 @@ run_server() {
   local code
   while true; do
     code=0
-    IDLE_EXIT_SECONDS=180 SELF_RESTART=1 node server.ts "$PORT" || code=$?
+    IDLE_EXIT_SECONDS=180 SELF_RESTART=1 node server/server.ts "$PORT" || code=$?
     [ "$code" -eq "$RESTART_EXIT_CODE" ] || return "$code"
   done
 }

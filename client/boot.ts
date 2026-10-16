@@ -1,5 +1,5 @@
 import { h } from "./dom.ts";
-import type { DashboardData } from "./types.ts";
+import type { DashboardData } from "../shared/types.ts";
 
 const BOOTED_KEY = "booted";
 const CHAR_MS = 8;
