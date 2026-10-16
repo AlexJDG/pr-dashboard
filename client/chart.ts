@@ -38,14 +38,23 @@ export const lineChart = ({ days, series }: Pick<Stats, "days" | "series">) => {
             ? [svg("text", { class: "axis", x: fixed(x(i)), y: CHART_H - AXIS_LABEL_OFFSET, "text-anchor": "middle" }, dayMonth(day))]
             : [],
     );
-    const lines = series.flatMap(({ name, values }) => {
-        const points = values.map((v, i) => `${fixed(x(i))},${fixed(y(v))}`).join(" ");
-        return [
-            svg("polyline", { class: `line ${SERIES_CLASS[name]}`, points, style: pulseStyle(name) }),
-            svg("polyline", { class: `flow ${SERIES_CLASS[name]}`, points, pathLength: FLOW_PATH_LENGTH, style: pulseStyle(`${name} flow`) }),
-            ...values.map((v, i) => svg("circle", { class: `dot ${SERIES_CLASS[name]}`, cx: fixed(x(i)), cy: fixed(y(v)), r: DOT_RADIUS })),
-        ];
-    });
+    const pointsOf = (values: number[]) => values.map((v, i) => `${fixed(x(i))},${fixed(y(v))}`).join(" ");
+    const lines = series.flatMap(({ name, values }) => [
+        svg("polyline", { class: `line ${SERIES_CLASS[name]}`, points: pointsOf(values) }),
+        ...values.map((v, i) => svg("circle", { class: `dot ${SERIES_CLASS[name]}`, cx: fixed(x(i)), cy: fixed(y(v)), r: DOT_RADIUS })),
+    ]);
+    const layer = (className: string, style: string, ...children: SVGElement[]) =>
+        h("div", { class: `chart-layer ${className}`, style, "aria-hidden": "true" }, svg("svg", { viewBox: `0 0 ${CHART_W} ${CHART_H}` }, children));
+    const glows = series.map(({ name, values }) =>
+        layer("pulse", pulseStyle(name), svg("polyline", { class: `glow ${SERIES_CLASS[name]}`, points: pointsOf(values) })),
+    );
+    const flows = layer(
+        "flows",
+        "",
+        ...series.map(({ name, values }) =>
+            svg("polyline", { class: `flow ${SERIES_CLASS[name]}`, points: pointsOf(values), pathLength: FLOW_PATH_LENGTH, style: pulseStyle(`${name} flow`) }),
+        ),
+    );
 
     // end labels sorted top to bottom and pushed apart so they never overlap; a leader line joins each to its line
     const ends = series
@@ -108,6 +117,8 @@ export const lineChart = ({ days, series }: Pick<Stats, "days" | "series">) => {
                 svg("line", { class: "crosshair", x1: 0, x2: 0, y1: PAD.top, y2: PAD.top + plotH }),
                 hits,
             ),
+            glows,
+            flows,
             h("div", { class: "chart-tip", hidden: true }),
         ),
         h(

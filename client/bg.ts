@@ -24,8 +24,9 @@ const FLOOR_FRAME_MS = 1000 / 30;
 
 const rain = document.querySelector<HTMLCanvasElement>("canvas.rain");
 const floor = document.querySelector<HTMLCanvasElement>("canvas.floor");
-const rainCtx = rain?.getContext("2d");
-const floorCtx = floor?.getContext("2d");
+// willReadFrequently makes Chrome draw these canvases on the CPU; the GPU then only shows the finished frames
+const rainCtx = rain?.getContext("2d", { willReadFrequently: true });
+const floorCtx = floor?.getContext("2d", { willReadFrequently: true });
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let drops: number[] = [];
 let lastRainStep = 0;

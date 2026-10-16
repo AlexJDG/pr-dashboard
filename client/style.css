@@ -22,7 +22,7 @@ body::after {
 .bg { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
 .bg::before, .bg::after {
     content: ""; position: absolute; width: 70vmax; height: 70vmax; border-radius: 50%;
-    animation: drift 30s ease-in-out infinite alternate;
+    animation: drift 30s ease-in-out infinite alternate; will-change: transform;
 }
 .bg::before { left: -25vmax; top: -30vmax; background: radial-gradient(circle, rgba(255, 43, 214, .13), transparent 60%); }
 .bg::after {
@@ -36,7 +36,7 @@ body::after {
 .beam {
     position: absolute; left: 0; right: 0; top: -160px; height: 160px;
     background: linear-gradient(transparent, rgba(0, 229, 255, .07), transparent);
-    animation: beam 9s linear infinite;
+    animation: beam 9s linear infinite; will-change: transform;
 }
 @keyframes beam { to { transform: translateY(calc(100vh + 160px)); } }
 h1 { font-size: 1.1rem; font-weight: 700; margin: 0 0 1.5rem; letter-spacing: .02em; }
@@ -144,8 +144,14 @@ footer { margin-top: 2rem; font-size: 12px; }
 .bar-login { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crown { color: var(--amber); text-shadow: 0 0 8px var(--amber), 0 0 16px var(--amber); line-height: 1; }
 .bar-track { height: 8px; }
-.bar { display: block; height: 100%; min-width: 2px; background: var(--cyan); border-radius: 0 4px 4px 0; box-shadow: 0 0 8px -2px var(--cyan); transition: width .6s ease-out;; animation: bar-pulse var(--pulse-ms) ease-in-out var(--pulse-delay) infinite; }
-@keyframes bar-pulse { 50% { box-shadow: 0 0 14px 0 var(--cyan); filter: brightness(1.3); } }
+.bar { position: relative; display: block; height: 100%; min-width: 2px; background: var(--cyan); border-radius: 0 4px 4px 0; box-shadow: 0 0 8px -2px var(--cyan); transition: width .6s ease-out; }
+/* the pulse is a ready-drawn brighter glow that only fades in and out, which the GPU blends without repainting */
+.bar::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; opacity: 0;
+    background: rgba(255, 255, 255, .3); box-shadow: 0 0 14px 0 var(--cyan);
+    animation: pulse var(--pulse-ms) ease-in-out var(--pulse-delay) infinite;
+}
+@keyframes pulse { 50% { opacity: 1; } }
 .bar-value { text-align: right; color: var(--muted); }
 
 .s-opened { --s: #00a3bf; } .s-merged { --s: #a070ff; } .s-closed { --s: #c48300; }
@@ -160,12 +166,14 @@ footer { margin-top: 2rem; font-size: 12px; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .grid { stroke: var(--line); stroke-width: 1; }
 .axis { fill: var(--muted); font: 11px "JetBrains Mono", monospace; }
-.line { fill: none; stroke: var(--s); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 4px var(--s));; animation: line-pulse var(--pulse-ms) ease-in-out var(--pulse-delay) infinite; }
-@keyframes line-pulse { 50% { filter: drop-shadow(0 0 9px var(--s)); } }
+.line, .glow { fill: none; stroke: var(--s); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 4px var(--s)); }
+/* layers stacked over the chart, so their animation never repaints the filtered lines beneath */
+.chart-layer { position: absolute; top: 0; left: 0; right: 0; pointer-events: none; }
+.glow { filter: drop-shadow(0 0 9px var(--s)); }
+.chart-layer.pulse { opacity: 0; animation: pulse var(--pulse-ms) ease-in-out var(--pulse-delay) infinite; }
 /* a short bright dash of energy running along each line; dash and gap add up to the line's pathLength */
 .flow {
     fill: none; stroke: #ffffff; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 4 96; opacity: .7;
-    filter: drop-shadow(0 0 4px var(--s)); pointer-events: none;
     animation: line-flow var(--pulse-ms) linear var(--pulse-delay) infinite;
 }
 @keyframes line-flow { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
