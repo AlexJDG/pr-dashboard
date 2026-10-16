@@ -11,7 +11,19 @@ import { promisify } from "node:util";
 import { type DatedReview, leaderStreaks, localDay, pad2 } from "./leaders.ts";
 import type { DashboardData, Label, MergedPr, PrRow, RateInfo, Stats, StatsWindow, Tab } from "./types.ts";
 
-const REPO = "owner/repo";
+// Local settings live in a gitignored .env beside this file; see README.md
+try {
+    process.loadEnvFile(fileURLToPath(new URL(".env", import.meta.url)));
+} catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
+        throw error;
+    }
+}
+const REPO = process.env.PR_DASHBOARD_REPO ?? "";
+if (!/^[\w.-]+\/[\w.-]+$/.test(REPO)) {
+    console.error("Set PR_DASHBOARD_REPO to the repo to watch, as owner/name, in .env or the environment");
+    process.exit(1);
+}
 const REFRESH_SECONDS = 15;
 const DEFAULT_PORT = 8765;
 const PORT = Number(process.argv[2] ?? DEFAULT_PORT);

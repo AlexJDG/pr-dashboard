@@ -1,0 +1,46 @@
+# PR Dashboard
+
+A local, neon-terminal dashboard for one GitHub repo's pull requests: the merge queue, failing checks, conflicts, PRs awaiting review, and review and merge stats.
+
+It talks to GitHub through your own `gh` CLI login, so there are no tokens to configure, and it serves the page on `127.0.0.1` only.
+
+## Requirements
+
+- Node 24 or later (`.nvmrc` pins it for nvm)
+- The [GitHub CLI](https://cli.github.com/), logged in with `gh auth login`
+
+## Setup
+
+```sh
+npm install
+echo "PR_DASHBOARD_REPO=owner/name" > .env
+npm start
+```
+
+Then open <http://localhost:8765>. Pass a different port as an argument: `node server.ts 9000`.
+
+## Settings
+
+Read from the environment, or from `.env` beside `server.ts`:
+
+| Variable | Meaning |
+| --- | --- |
+| `PR_DASHBOARD_REPO` | The repo to watch, as `owner/name`. Required. |
+| `IDLE_EXIT_SECONDS` | Stop the server once no page has polled for this long. Off by default. |
+| `SELF_RESTART` | `1` to exit with code 75 when `server.ts` changes, for a wrapper to restart it. |
+
+## The repo's conventions
+
+Some tabs assume a particular workflow:
+
+- **In merge queue** lists open PRs labelled `automerge` and not `stacked`, ordered by [Kodiak](https://kodiakhq.com/)'s status (merging, then queue position, then blocked).
+- PRs labelled `hotfix` sort ahead of others in the queue.
+- Unresolved review threads count as failing, for repos that require threads resolved before merging.
+
+## API budget
+
+Each 15 second refresh costs about 7 GraphQL points, and stats (refreshed every 5 minutes, or straight after a merge) about 12. GitHub allows 5,000 an hour, shared with everything else using your `gh` login; the dashboard pauses until the reset if fewer than 500 remain.
+
+## Launching from Windows (WSL)
+
+`launch.sh` starts the server if it isn't already running and opens it in a Chrome app window. It assumes Chrome's default Windows install path; edit `CHROME` at the top if yours differs.
