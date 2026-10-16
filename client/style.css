@@ -100,7 +100,7 @@ h2::before { content: "// "; color: var(--muted); }
 a { color: var(--cyan); text-decoration: none; }
 a:hover { text-shadow: 0 0 8px var(--cyan); }
 
-table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 th { white-space: nowrap; color: var(--muted); font-weight: 400; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
 td, th { padding: .55rem .75rem; border-bottom: 1px solid var(--line); text-align: left; }
 td code { font: inherit; font-size: .9em; color: var(--fg); background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .14); border-radius: 3px; padding: 0 .3em; }
