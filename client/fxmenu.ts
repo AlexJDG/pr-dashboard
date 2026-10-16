@@ -52,13 +52,18 @@ export const mountFxMenu = (loadedData: () => DashboardData | null) => {
     ];
     const toggle = h("button", { type: "button", class: "fx-toggle", "aria-expanded": "false", "aria-controls": "fx-menu", "aria-label": "fx effects menu" }, "fx");
     const buttons = actions.map(([label]) => h("button", { type: "button" }, label));
-    const fxOffButton = h("button", { type: "button", "aria-pressed": String(storedFxOff()) }, "FX off");
-    fxOffButton.addEventListener("click", () => {
+    const effectsSwitch = h(
+        "button",
+        { type: "button", role: "switch", class: "fx-switch", "aria-checked": String(!storedFxOff()) },
+        "Effects",
+        h("span", { class: "switch", "aria-hidden": "true" }),
+    );
+    effectsSwitch.addEventListener("click", () => {
         const off = !document.documentElement.classList.contains("fx-off");
         setFxOff(off);
-        fxOffButton.setAttribute("aria-pressed", String(off));
+        effectsSwitch.setAttribute("aria-checked", String(!off));
     });
-    const menu = h("div", { id: "fx-menu", class: "fx-menu", hidden: true }, fxOffButton, buttons);
+    const menu = h("div", { id: "fx-menu", class: "fx-menu", hidden: true }, effectsSwitch, buttons);
     const root = h("div", { class: "fx-root" }, toggle, menu);
     let isOpen = false;
     const setOpen = (open: boolean) => {
