@@ -140,7 +140,7 @@ type StatsPr = {
 };
 
 type StatsResult = {
-    search: { issueCount: number; pageInfo: { hasNextPage: boolean; endCursor: string }; nodes: (StatsPr | null)[] };
+    search: { issueCount: number; pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: (StatsPr | null)[] };
 };
 
 const execFileAsync = promisify(execFile);
@@ -318,7 +318,8 @@ const searchUpdated = async (from: Date, to: Date | null): Promise<StatsPr[]> =>
             return [...(await searchUpdated(from, middle)), ...(await searchUpdated(new Date(middle.getTime() + MS_PER_SECOND), to))];
         }
         prs.push(...nodes.filter((pr): pr is StatsPr => typeof pr?.number === "number"));
-        if (!pageInfo.hasNextPage) {
+        // GitHub can report another page without a cursor to reach it, e.g. after an empty page
+        if (!pageInfo.hasNextPage || pageInfo.endCursor === null) {
             return prs;
         }
         variables.after = pageInfo.endCursor;
