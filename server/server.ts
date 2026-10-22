@@ -70,9 +70,12 @@ const CHART_DAYS = 14;
 // The longest window plus as many days again, so a leader streak on that window has history to draw on
 const STATS_FETCH_DAYS = Math.max(...STATS_WINDOW_DAYS) * 2;
 const SEARCH_RESULT_CAP = 1000;
-// Fetched in slices of this many days, halved further wherever a slice still reaches the result cap
+// PRs created in the window are fetched in slices of this many days, halved further wherever one reaches the result cap
 const STATS_SLICE_DAYS = 14;
 const STATS_REFRESH_SECONDS = 300;
+const STATS_RETRY_SECONDS = 60;
+// A fetch with under this share of the previous one's PRs is taken as a search glitch, not real change
+const STATS_MIN_SHARE = 0.5;
 const STATS_QUERY = `
 query($q: String!, $after: String) {
   search(query: $q, type: ISSUE, first: 100, after: $after) {
@@ -298,29 +301,50 @@ const windowStats = (prs: StatsPr[], days: number, now: Date, datedReviews: Date
 };
 
 const MIN_SPLIT_MS = 60 * MS_PER_SECOND;
+const SEARCH_ATTEMPTS = 3;
 
-// Pages through PRs updated in a time range (open-ended when `to` is null, so nothing updated just now is missed),
-// halving the range and retrying whenever it matches more than GitHub search will return
-const searchUpdated = async (from: Date, to: Date | null): Promise<StatsPr[]> => {
+// GitHub search intermittently answers with no results at all, or promises pages it can't serve, so retry those
+const searchPage = async (variables: Record<string, string>) => {
+    for (let attempt = 1; ; attempt++) {
+        const { search } = await graphql<StatsResult>(STATS_QUERY, variables);
+        const { issueCount, pageInfo, nodes } = search;
+        const looksBroken = issueCount === 0 || (pageInfo.hasNextPage && (pageInfo.endCursor === null || nodes.length === 0));
+        if (!looksBroken || attempt === SEARCH_ATTEMPTS) {
+            return search;
+        }
+    }
+};
+
+// Pages through PRs matching `filter` whose `field` date is in a time range (open-ended when `to` is null, so nothing
+// from just now is missed), halving the range and retrying whenever it matches more than GitHub search will return
+const searchRange = async (filter: string, field: string, from: Date, to: Date | null): Promise<StatsPr[]> => {
     const range = to === null ? `>=${searchTimestamp(from)}` : `${searchTimestamp(from)}..${searchTimestamp(to)}`;
-    const variables: Record<string, string> = { q: `repo:${REPO} is:pr updated:${range}` };
+    const variables: Record<string, string> = { q: `repo:${REPO} is:pr ${filter} ${field}:${range}` };
     const prs: StatsPr[] = [];
     while (true) {
-        const result = await graphql<StatsResult>(STATS_QUERY, variables);
-        const { issueCount, pageInfo, nodes } = result.search;
+        const { issueCount, pageInfo, nodes } = await searchPage(variables);
+        // an empty first page can be genuine, but one partway through means the search failed
+        if (issueCount === 0 && variables.after !== undefined) {
+            throw new Error("GitHub search returned an incomplete page; keeping the previous stats");
+        }
         if (issueCount > SEARCH_RESULT_CAP) {
             const end = (to ?? new Date()).getTime();
             if (end - from.getTime() < MIN_SPLIT_MS) {
-                throw new Error(`More than ${SEARCH_RESULT_CAP} PRs were updated around ${searchTimestamp(from)}, past GitHub search's result cap`);
+                throw new Error(`More than ${SEARCH_RESULT_CAP} PRs share a ${field} time around ${searchTimestamp(from)}, past GitHub search's result cap`);
             }
             const middle = new Date((from.getTime() + end) / 2);
             // ranges include both ends to the second, so the second half starts a second later
-            return [...(await searchUpdated(from, middle)), ...(await searchUpdated(new Date(middle.getTime() + MS_PER_SECOND), to))];
+            return [
+                ...(await searchRange(filter, field, from, middle)),
+                ...(await searchRange(filter, field, new Date(middle.getTime() + MS_PER_SECOND), to)),
+            ];
         }
         prs.push(...nodes.filter((pr): pr is StatsPr => typeof pr?.number === "number"));
-        // GitHub can report another page without a cursor to reach it, e.g. after an empty page
-        if (!pageInfo.hasNextPage || pageInfo.endCursor === null) {
+        if (!pageInfo.hasNextPage) {
             return prs;
+        }
+        if (pageInfo.endCursor === null || nodes.length === 0) {
+            throw new Error("GitHub search returned an incomplete page; keeping the previous stats");
         }
         variables.after = pageInfo.endCursor;
     }
@@ -330,6 +354,8 @@ const reviewStats = async (): Promise<Stats> => {
     const now = new Date();
     const dayOffset = (offset: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
     const days = Array.from({ length: CHART_DAYS }, (_, i) => localDay(dayOffset(i - (CHART_DAYS - 1))));
+    const start = dayOffset(-STATS_FETCH_DAYS);
+    const beforeStart = new Date(start.getTime() - MS_PER_SECOND);
     const sliceCount = Math.ceil(STATS_FETCH_DAYS / STATS_SLICE_DAYS);
     // consecutive slices from local midnight STATS_FETCH_DAYS ago, ending a second before the next one starts
     const slices = Array.from({ length: sliceCount }, (_, i) => {
@@ -337,12 +363,23 @@ const reviewStats = async (): Promise<Stats> => {
         const next = dayOffset(-STATS_FETCH_DAYS + (i + 1) * STATS_SLICE_DAYS);
         return { from, to: i === sliceCount - 1 ? null : new Date(next.getTime() - MS_PER_SECOND) };
     });
-    // keyed by number, as a PR updated mid-fetch can move into a later slice
+    // Every PR that can have been opened, closed or reviewed in the window. Not "updated" in the window: bots touching
+    // PRs in bulk make that date meaningless.
+    const searches = [
+        ...slices.map(({ from, to }) => () => searchRange("", "created", from, to)),
+        () => searchRange(`created:<${searchTimestamp(start)}`, "closed", start, null),
+        () => searchRange("is:open", "created", new Date(0), beforeStart),
+    ];
+    // keyed by number, as a PR can turn up in more than one search
     const byNumber = new Map<number, StatsPr>();
-    for (const { from, to } of slices) {
-        (await searchUpdated(from, to)).forEach((pr) => byNumber.set(pr.number, pr));
+    for (const search of searches) {
+        (await search()).forEach((pr) => byNumber.set(pr.number, pr));
     }
     const prs = [...byNumber.values()];
+    if (prs.length < lastStatsPrCount * STATS_MIN_SHARE) {
+        throw new Error(`GitHub search returned ${prs.length} PRs, down from ${lastStatsPrCount}; keeping the previous stats`);
+    }
+    lastStatsPrCount = prs.length;
     const datedReviews = prs.flatMap((pr) =>
         countedReviews(pr).map(({ login, submittedAt }) => ({ login, prNumber: pr.number, day: localDay(new Date(submittedAt)) })),
     );
@@ -401,6 +438,7 @@ let recentMerges: MergedPr[] = [];
 let stats: Stats | null = null;
 let statsError = "";
 let statsInFlight = false;
+let lastStatsPrCount = 0;
 let nextStats = 0;
 let inFlight: Promise<void> | null = null;
 let lastPoll = performance.now();
@@ -421,6 +459,7 @@ const refreshStats = async () => {
         statsError = "";
     } catch (e) {
         statsError = errorText(e);
+        nextStats = performance.now() + STATS_RETRY_SECONDS * MS_PER_SECOND;
     } finally {
         statsInFlight = false;
     }
