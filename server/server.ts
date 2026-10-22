@@ -233,13 +233,23 @@ const isPullRequest = (node: RawPr | null): node is RawPr => typeof node?.number
 
 const isMergedPr = (node: MergedPr | null): node is MergedPr => typeof node?.number === "number";
 
+const SEARCH_ATTEMPTS = 3;
+let lastOpenCount = 0;
+
 const openPrs = async () => {
     const now = new Date();
     const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const result = await graphql<OpenPrsResult>(QUERY, {
+    const variables = {
         q: `repo:${REPO} is:pr ${BASE}`,
         mergedQ: `repo:${REPO} is:pr is:merged merged:>=${searchTimestamp(midnight)} sort:updated-desc`,
-    });
+    };
+    // GitHub search intermittently answers with nothing, so a sudden drop to no open PRs is retried before it's
+    // believed; once believed, later empty answers aren't retried, so a quiet repo doesn't pay for retries
+    let result = await graphql<OpenPrsResult>(QUERY, variables);
+    for (let attempt = 1; result.search.nodes.length === 0 && lastOpenCount > 0 && attempt < SEARCH_ATTEMPTS; attempt++) {
+        result = await graphql<OpenPrsResult>(QUERY, variables);
+    }
+    lastOpenCount = result.search.nodes.length;
     return {
         prs: result.search.nodes.filter(isPullRequest).map(toPr),
         merges: result.merged.nodes.filter(isMergedPr),
@@ -301,7 +311,6 @@ const windowStats = (prs: StatsPr[], days: number, now: Date, datedReviews: Date
 };
 
 const MIN_SPLIT_MS = 60 * MS_PER_SECOND;
-const SEARCH_ATTEMPTS = 3;
 
 // GitHub search intermittently answers with no results at all, or promises pages it can't serve, so retry those
 const searchPage = async (variables: Record<string, string>) => {
