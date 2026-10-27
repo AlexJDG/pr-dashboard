@@ -18,6 +18,7 @@ const DATA_TIMEOUT_MS = 60 * 1000;
 const DEFAULT_STATS_DAYS = 7;
 const MIN_TABLE_PX = 240;
 const STATS_DAYS_KEY = "statsDays";
+const STATS_VIEW_KEY = "statsView";
 const MIN_STREAK_DAYS = 2;
 const NO_VALUE = "-";
 
@@ -31,15 +32,26 @@ let seenMerges: Set<number> | null = null;
 let seedMergedAt = "";
 const provideBootData = startBoot();
 
-const storedStatsDays = () => {
+const stored = (key: string) => {
     try {
-        return Number(localStorage.getItem(STATS_DAYS_KEY)) || DEFAULT_STATS_DAYS;
+        return localStorage.getItem(key);
     } catch {
-        return DEFAULT_STATS_DAYS;
+        return null;
     }
 };
 
+const store = (key: string, value: string) => {
+    try {
+        localStorage.setItem(key, value);
+    } catch {
+        // the choice just won't survive a reload
+    }
+};
+
+const storedStatsDays = () => Number(stored(STATS_DAYS_KEY)) || DEFAULT_STATS_DAYS;
+
 let statsDays = storedStatsDays();
+let statsView = stored(STATS_VIEW_KEY) === "opened" ? "opened" : "merged";
 
 const labelStyle = (colour: string) => {
     const safe = HEX_COLOUR.test(colour) ? colour : DEFAULT_LABEL_COLOR;
@@ -144,25 +156,29 @@ const statsPanel = (repo: string, stats: Stats | null) => {
         return null;
     }
     const period = selected.days === 1 ? "today" : `last ${selected.days} days`;
-    const top = Math.max(1, ...selected.reviews.map((review) => review.count));
-    const bars = selected.reviews.map(({ login, count }) => {
-        const isTop = count === selected.reviews[0]?.count;
-        const leaderStreak = isTop ? selected.leaderStreaks[login] : undefined;
+    const inPeriod = selected.days === 1 ? period : `in the ${period}`;
+    const opened = statsView === "opened";
+    const counts = opened ? selected.authors : selected.reviews;
+    const top = Math.max(1, ...counts.map((c) => c.count));
+    const bars = counts.map(({ login, count }) => {
+        const isTop = count === counts[0]?.count;
+        const leaderStreak = isTop && !opened ? selected.leaderStreaks[login] : undefined;
         const leaderDays = leaderStreak?.days ?? 0;
         const hasStreak = leaderDays >= MIN_STREAK_DAYS;
         const leaderNote = `top reviewer for ${leaderDays}${leaderStreak?.capped ? "+" : ""} working days running`;
+        const topLabel = opened ? "Opened the most PRs" : "Top reviewer";
         return h(
             "div",
             {
                 class: "bar-row",
-                title: `${login} reviewed ${count} PR${count === 1 ? "" : "s"} ${selected.days === 1 ? period : `in the ${period}`}${hasStreak ? `, ${leaderNote}` : ""}`,
+                title: `${login} ${opened ? "opened" : "reviewed"} ${count} PR${count === 1 ? "" : "s"} ${inPeriod}${hasStreak ? `, ${leaderNote}` : ""}`,
             },
             h(
                 "span",
                 { class: "bar-name" },
                 h("span", { class: "bar-login" }, login),
                 isTop
-                    ? h("span", { class: "crown", role: "img", "aria-label": hasStreak ? `Top reviewer, ${leaderNote}` : "Top reviewer" }, hasStreak ? `♛ ${leaderDays}d${leaderStreak?.capped ? "+" : ""}` : "♛")
+                    ? h("span", { class: "crown", role: "img", "aria-label": hasStreak ? `${topLabel}, ${leaderNote}` : topLabel }, hasStreak ? `♛ ${leaderDays}d${leaderStreak?.capped ? "+" : ""}` : "♛")
                     : null,
             ),
             h("span", { class: "bar-track" }, h("span", { class: "bar", style: `width:${((count / top) * PERCENT).toFixed(1)}%;${pulseStyle(login)}` })),
@@ -178,6 +194,14 @@ const statsPanel = (repo: string, stats: Stats | null) => {
             "Stats",
             h(
                 "span",
+                { class: "range", role: "group", "aria-label": "Stats view" },
+                [
+                    ["merged", "Merged & reviewed"],
+                    ["opened", "Opened"],
+                ].map(([view, label]) => h("button", { type: "button", "data-stats-view": view, "aria-pressed": String(view === statsView) }, label)),
+            ),
+            h(
+                "span",
                 { class: "range", role: "group", "aria-label": "Stats period" },
                 stats.windows.map((w) =>
                     h("button", { type: "button", "data-stats-days": w.days, "aria-pressed": String(w === selected) }, `${w.days}d`),
@@ -190,24 +214,41 @@ const statsPanel = (repo: string, stats: Stats | null) => {
             h(
                 "div",
                 { class: "stat-column" },
-                h(
-                    "a",
-                    { class: "tile stat", href: githubSearchUrl(repo, selected.mergedSearch) },
-                    h("span", { class: "tile-label" }, `Merged, ${period}`),
-                    h("span", { class: "big" }, `${selected.merged + (optimisticMerges?.count ?? 0)}`),
-                ),
-                h(
-                    "div",
-                    { class: "tile median" },
-                    h("span", { class: "tile-label" }, `Median time to merge, ${period}`),
-                    h("span", { class: "big" }, selected.medianMergeMs === null ? NO_VALUE : compactDuration(selected.medianMergeMs)),
-                ),
+                opened
+                    ? [
+                          h(
+                              "a",
+                              { class: "tile stat", href: githubSearchUrl(repo, selected.openedSearch) },
+                              h("span", { class: "tile-label" }, `Opened, ${period}`),
+                              h("span", { class: "big" }, `${selected.opened}`),
+                          ),
+                          h(
+                              "a",
+                              { class: "tile median", href: githubSearchUrl(repo, `${selected.openedSearch} is:open`) },
+                              h("span", { class: "tile-label" }, `Still open, of those`),
+                              h("span", { class: "big" }, `${selected.stillOpen}`),
+                          ),
+                      ]
+                    : [
+                          h(
+                              "a",
+                              { class: "tile stat", href: githubSearchUrl(repo, selected.mergedSearch) },
+                              h("span", { class: "tile-label" }, `Merged, ${period}`),
+                              h("span", { class: "big" }, `${selected.merged + (optimisticMerges?.count ?? 0)}`),
+                          ),
+                          h(
+                              "div",
+                              { class: "tile median" },
+                              h("span", { class: "tile-label" }, `Median time to merge, ${period}`),
+                              h("span", { class: "big" }, selected.medianMergeMs === null ? NO_VALUE : compactDuration(selected.medianMergeMs)),
+                          ),
+                      ],
             ),
             h(
                 "div",
                 { class: "tile reviews" },
-                h("span", { class: "tile-label" }, `PRs reviewed by dev, ${period}`),
-                bars.length ? bars : h("p", { class: "muted" }, "No reviews"),
+                h("span", { class: "tile-label" }, `PRs ${opened ? "opened" : "reviewed"} by dev, ${period}`),
+                bars.length ? bars : h("p", { class: "muted" }, opened ? "No PRs opened" : "No reviews"),
             ),
         ),
         lineChart(stats),
@@ -436,11 +477,13 @@ document.addEventListener("click", (e) => {
     const range = e.target.closest<HTMLElement>("[data-stats-days]");
     if (range && lastData) {
         statsDays = Number(range.dataset.statsDays);
-        try {
-            localStorage.setItem(STATS_DAYS_KEY, String(statsDays));
-        } catch {
-            // the choice just won't survive a reload
-        }
+        store(STATS_DAYS_KEY, String(statsDays));
+        redrawStats(lastData);
+    }
+    const view = e.target.closest<HTMLElement>("[data-stats-view]");
+    if (view && lastData) {
+        statsView = view.dataset.statsView ?? statsView;
+        store(STATS_VIEW_KEY, statsView);
         redrawStats(lastData);
     }
 });

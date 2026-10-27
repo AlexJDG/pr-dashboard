@@ -284,6 +284,9 @@ const median = (values: number[]) => {
     return middle.reduce((sum, value) => sum + value) / middle.length;
 };
 
+const byCount = (counts: { login: string; count: number }[]) =>
+    counts.sort((a, b) => b.count - a.count || compareStrings(a.login.toLowerCase(), b.login.toLowerCase()));
+
 // Calendar days including today, so the 1 day window matches today's point on the chart
 const windowStats = (prs: StatsPr[], days: number, now: Date, datedReviews: DatedReview[]): StatsWindow => {
     const since = searchTimestamp(new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1)));
@@ -295,6 +298,8 @@ const windowStats = (prs: StatsPr[], days: number, now: Date, datedReviews: Date
             }
         }
     }
+    const opened = prs.filter((pr) => pr.createdAt >= since);
+    const authored = Map.groupBy(opened, (pr) => pr.author?.login ?? GHOST_LOGIN);
     const mergeDurationsMs = prs.flatMap((pr) =>
         pr.mergedAt && pr.mergedAt >= since ? [Date.parse(pr.mergedAt) - Date.parse(pr.createdAt)] : [],
     );
@@ -303,9 +308,11 @@ const windowStats = (prs: StatsPr[], days: number, now: Date, datedReviews: Date
         merged: mergeDurationsMs.length,
         medianMergeMs: median(mergeDurationsMs),
         mergedSearch: `repo:${REPO} is:pr is:merged merged:>=${since}`,
-        reviews: [...reviewed]
-            .map(([login, numbers]) => ({ login, count: numbers.size }))
-            .sort((a, b) => b.count - a.count || compareStrings(a.login.toLowerCase(), b.login.toLowerCase())),
+        reviews: byCount([...reviewed].map(([login, numbers]) => ({ login, count: numbers.size }))),
+        opened: opened.length,
+        stillOpen: opened.filter((pr) => !pr.closedAt).length,
+        openedSearch: `repo:${REPO} is:pr created:>=${since}`,
+        authors: byCount([...authored].map(([login, authoredPrs]) => ({ login, count: authoredPrs.length }))),
         leaderStreaks: leaderStreaks(datedReviews, days, now, STATS_FETCH_DAYS),
     };
 };
