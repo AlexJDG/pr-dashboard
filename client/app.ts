@@ -149,7 +149,7 @@ const panel = (tab: Tab, repo: string) =>
 
 const statsPanel = (repo: string, stats: Stats | null) => {
     if (!stats) {
-        return null;
+        return h("div", { class: "stats" }, h("h2", {}, "Stats"), h("p", { class: "muted" }, "Loading stats…"));
     }
     const selected = stats.windows.find((w) => w.days === statsDays) ?? stats.windows.find((w) => w.days === DEFAULT_STATS_DAYS) ?? stats.windows[0];
     if (!selected) {
