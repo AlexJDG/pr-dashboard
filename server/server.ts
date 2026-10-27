@@ -557,6 +557,7 @@ const buildTabs = (): Tab[] => {
 const CLIENT_FILES = new Map([
     ["/", { file: "index.html", type: "text/html; charset=utf-8", strip: false }],
     ["/style.css", { file: "style.css", type: "text/css; charset=utf-8", strip: false }],
+    ["/icon.svg", { file: "icon.svg", type: "image/svg+xml", strip: false }],
     ...["app.ts", "bg.ts", "boot.ts", "chart.ts", "dom.ts", "format.ts", "fx.ts", "fxmenu.ts", "glyphs.ts"].map(
         (file) => [`/${file}`, { file, type: "text/javascript; charset=utf-8", strip: true }] as const,
     ),

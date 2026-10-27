@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f1a26"/>
+      <stop offset="1" stop-color="#05080c"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="tile"><rect x="12" y="12" width="232" height="232" rx="44"/></clipPath>
+  </defs>
+  <rect x="12" y="12" width="232" height="232" rx="44" fill="url(#bg)"/>
+  <g clip-path="url(#tile)" stroke="#ff2bd6" stroke-opacity=".35" stroke-width="2">
+    <path d="M12 196H244M12 214H244M12 234H244M128 180L40 244M128 180L216 244M128 180V244M128 180L-20 244M128 180L276 244"/>
+  </g>
+  <g filter="url(#glow)" fill="none" stroke-width="16" stroke-linecap="round">
+    <path d="M92 76V180" stroke="#2de2ff"/>
+    <path d="M164 92C164 140 128 148 92 150" stroke="#ff2bd6"/>
+    <circle cx="92" cy="64" r="20" stroke="#2de2ff"/>
+    <circle cx="92" cy="186" r="20" stroke="#2de2ff" fill="#2de2ff"/>
+    <circle cx="164" cy="74" r="20" stroke="#ff2bd6"/>
+  </g>
+  <rect x="12" y="12" width="232" height="232" rx="44" fill="none" stroke="#2de2ff" stroke-width="6" filter="url(#glow)"/>
+</svg>
