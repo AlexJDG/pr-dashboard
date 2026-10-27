@@ -267,7 +267,7 @@ const fitPanels = () => {
     }
     const contentBottom = main.getBoundingClientRect().bottom + scrollY + parseFloat(getComputedStyle(document.body).paddingBottom);
     const room = innerHeight - (contentBottom - shown.offsetHeight);
-    panels.style.setProperty("--table-max", `${Math.max(MIN_TABLE_PX, room)}px`);
+    panels.style.setProperty("--table-max", `${Math.max(MIN_TABLE_PX, Math.floor(room))}px`);
 };
 
 // main is replaced on every redraw, so draw() points this at each new one

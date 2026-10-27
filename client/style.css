@@ -5,6 +5,8 @@
     color-scheme: dark;
 }
 * { box-sizing: border-box; }
+/* always leaves room for the page scrollbar, so it appearing can't narrow the page, rewrap rows, resize the table and hide it again */
+html { scrollbar-gutter: stable; }
 body {
     background:
         radial-gradient(ellipse at top, rgba(0, 229, 255, .08), transparent 60%),
