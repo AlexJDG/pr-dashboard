@@ -557,7 +557,7 @@ const buildTabs = (): Tab[] => {
 const CLIENT_FILES = new Map([
     ["/", { file: "index.html", type: "text/html; charset=utf-8", strip: false }],
     ["/style.css", { file: "style.css", type: "text/css; charset=utf-8", strip: false }],
-    ["/icon.svg", { file: "icon.svg", type: "image/svg+xml", strip: false }],
+    ["/icon.png", { file: "icon.png", type: "image/png", strip: false }],
     ...["app.ts", "bg.ts", "boot.ts", "chart.ts", "dom.ts", "format.ts", "fx.ts", "fxmenu.ts", "glyphs.ts"].map(
         (file) => [`/${file}`, { file, type: "text/javascript; charset=utf-8", strip: true }] as const,
     ),
@@ -596,7 +596,7 @@ const withVersion = (html: string, pathname: string) =>
 
 const server = createServer(async (req, res) => {
     lastPoll = performance.now();
-    const send = (status: number, type: string, body: string) => {
+    const send = (status: number, type: string, body: string | Buffer) => {
         res.writeHead(status, { "Content-Type": type, "Cache-Control": "no-store" });
         res.end(body);
     };
@@ -616,8 +616,13 @@ const server = createServer(async (req, res) => {
             if (!client) {
                 send(404, "text/plain; charset=utf-8", "Not found");
             } else {
-                const source = readFileSync(path.join(CLIENT_DIR, client.file), "utf8");
-                send(200, client.type, client.strip ? stripTypeScriptTypes(source) : withVersion(source, pathname));
+                const file = readFileSync(path.join(CLIENT_DIR, client.file));
+                const source = file.toString("utf8");
+                send(
+                    200,
+                    client.type,
+                    client.type.startsWith("image/") ? file : client.strip ? stripTypeScriptTypes(source) : withVersion(source, pathname),
+                );
             }
         }
         if (pathname !== "/version") {
