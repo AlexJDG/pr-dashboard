@@ -51,8 +51,10 @@ Each 15 second refresh costs about 7 GraphQL points, and stats (refreshed every 
 
 ## Launching from Windows (WSL)
 
-`launch.sh` starts the server if it isn't already running and opens the page in `PR_DASHBOARD_BROWSER`. Chrome, Edge, Brave and Chromium open it as a standalone app window in `PR_DASHBOARD_BROWSER_PROFILE`; any other browser opens it in a normal tab. `./make-shortcut.sh` puts a shortcut to it on your Windows desktop. For example, for Edge:
+`launch.sh` starts the server if it isn't already running and opens the page in `PR_DASHBOARD_BROWSER`. Chrome, Edge, Brave and Chromium open it as a standalone app window in `PR_DASHBOARD_BROWSER_PROFILE`; any other browser opens it in a normal tab. For example, for Edge:
 
 ```sh
 PR_DASHBOARD_BROWSER=/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe
 ```
+
+`./make-shortcut.sh` creates or updates a "PR Dashboard" shortcut to it on your Windows desktop.
