@@ -67,7 +67,7 @@ h1 { font-size: 1.1rem; font-weight: 700; margin: 0 0 1.5rem; letter-spacing: .0
 .tile[data-tab=conflicts] { --c: var(--amber); }
 .tile[data-tab=review] { --c: var(--green); }
 .tile[data-tab=other] { --c: var(--muted); }
-.tile[data-tab=mine] { --c: #c77dab; }
+.tile[data-tab=mine] { --c: hsl(312 60% 62%); }
 .tile-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
 .big {
     display: block; font-size: 2.8rem; font-weight: 800; line-height: 1; margin-top: .4rem; white-space: nowrap;
