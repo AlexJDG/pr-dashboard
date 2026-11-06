@@ -75,8 +75,8 @@ const breach = (prs: MergedPr[], animate: boolean) => {
         lines.forEach((line) => line.classList.add("pending"));
         lines.forEach((line, i) =>
             setTimeout(() => {
-                line.classList.remove("pending");
                 glitchType(line, line.textContent ?? "");
+                line.classList.remove("pending");
             }, TERMINAL_OPEN_MS + i * TERMINAL_LINE_MS),
         );
     }
@@ -88,6 +88,7 @@ const breach = (prs: MergedPr[], animate: boolean) => {
 // Reveals the text left to right, with a random glyph standing in for the character being typed
 const glitchType = (element: HTMLElement, text: string) => {
     let revealed = 0;
+    element.textContent = "";
     const timer = setInterval(() => {
         revealed += TYPE_CHARS_PER_TICK;
         if (revealed >= text.length) {
