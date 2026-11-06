@@ -15,7 +15,7 @@ export type PrRow = {
     blocked: boolean;
 };
 
-export type TabKey = "queue" | "open" | "failing" | "conflicts" | "review" | "other";
+export type TabKey = "queue" | "open" | "failing" | "conflicts" | "review" | "other" | "mine";
 
 export type Tab = {
     key: TabKey;

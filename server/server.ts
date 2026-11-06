@@ -544,6 +544,7 @@ const buildTabs = (): Tab[] => {
         const blocked = key === "queue" ? prs.filter(isBlocked).length : 0;
         return { key, label, search, prs: prs.map(toRow), count: prs.length - blocked, blocked };
     };
+    const mine = open.filter((pr) => pr.author === viewer);
     return [
         tab("queue", "In merge queue", automerge, QUEUE),
         tab("open", "Non-draft", open, BASE),
@@ -551,6 +552,7 @@ const buildTabs = (): Tab[] => {
         tab("conflicts", "Merge conflicts", conflicts, null),
         tab("review", "Awaiting review", needsReview, NEEDS_REVIEW),
         tab("other", "Other", open.filter((pr) => !accountedFor.has(pr.number)), null),
+        ...(mine.length ? [tab("mine", "My PRs", mine, `${BASE} author:@me`)] : []),
     ];
 };
 
