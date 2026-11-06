@@ -4,6 +4,7 @@ export type PrRow = {
     number: number;
     title: string;
     url: string;
+    draft: boolean;
     createdAt: string;
     updatedAt: string;
     additions: number;

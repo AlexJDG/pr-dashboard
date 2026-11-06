@@ -61,6 +61,8 @@ const labelStyle = (colour: string) => {
 // Odd pieces of a split on a capture group are the text between backticks
 const titleWithCode = (title: string) => title.split(/`([^`]+)`/).map((part, i) => (i % 2 ? h("code", {}, part) : part));
 
+const DRAFT_LABEL: Label = { name: "draft", color: "6e7681" };
+
 const pill = (label: Label) => [" ", h("span", { class: "label", style: labelStyle(label.color) }, label.name)];
 
 // The link wraps the whole row so hovering anywhere shows its URL; display: contents keeps the table layout
@@ -70,12 +72,13 @@ const tableRow = (pr: PrRow, i: number, kodiak: boolean) =>
         { class: "row", href: pr.url, rel: "noopener" },
         h(
             "tr",
-            { style: `--i:${i}`, class: kodiak && pr.blocked ? "blocked" : undefined },
+            { style: `--i:${i}`, class: pr.draft ? "draft" : kodiak && pr.blocked ? "blocked" : undefined },
             h("td", {}, h("span", { class: "num" }, `#${pr.number}`)),
             h(
                 "td",
                 {},
                 titleWithCode(pr.title),
+                pr.draft ? pill(DRAFT_LABEL) : null,
                 pr.labels.flatMap(pill),
                 pr.unresolved ? [" ", h("span", { class: "unresolved" }, `${pr.unresolved} unresolved`)] : null,
             ),

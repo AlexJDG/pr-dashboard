@@ -45,7 +45,7 @@ const RECENT_MERGES_LIMIT = 10;
 // First 100 open PRs only; paginate if the repo ever has more
 const QUERY = `
 fragment OpenPr on PullRequest {
-  number title url createdAt updatedAt additions deletions mergeable reviewDecision author { login }
+  number title url isDraft createdAt updatedAt additions deletions mergeable reviewDecision author { login }
   reviewThreads(first: 100) { nodes { isResolved } }
   latestOpinionatedReviews(first: 10) { nodes { state author { login } } }
   reviewRequests(first: 10) { nodes { requestedReviewer { ... on User { login } } } }
@@ -102,13 +102,12 @@ const QUEUE = `${BASE} label:automerge -label:stacked`;
 const MIN_RATE_REMAINING = 500;
 const GHOST_LOGIN = "ghost";
 const NO_KODIAK_STATUS = "no Kodiak status";
-// Shown on drafts in My PRs, which aren't otherwise marked
-const DRAFT_LABEL: Label = { name: "draft", color: "6e7681" };
 
 type RawPr = {
     number: number;
     title: string;
     url: string;
+    isDraft: boolean;
     createdAt: string;
     updatedAt: string;
     additions: number;
@@ -211,6 +210,7 @@ const toPr = (raw: RawPr): Pr => {
         number: raw.number,
         title: raw.title,
         url: raw.url,
+        draft: raw.isDraft,
         createdAt: raw.createdAt,
         updatedAt: raw.updatedAt,
         additions: raw.additions,
@@ -260,10 +260,7 @@ const openPrs = async () => {
     lastOpenCount = result.search.nodes.length;
     return {
         prs: result.search.nodes.filter(isPullRequest).map(toPr),
-        drafts: result.drafts.nodes.filter(isPullRequest).map((raw) => {
-            const pr = toPr(raw);
-            return { ...pr, labels: [DRAFT_LABEL, ...pr.labels] };
-        }),
+        drafts: result.drafts.nodes.filter(isPullRequest).map(toPr),
         merges: result.merged.nodes.filter(isMergedPr),
         rate: result.rateLimit,
         me: result.viewer.login,

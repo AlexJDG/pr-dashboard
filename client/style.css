@@ -123,6 +123,7 @@ a.row:hover { text-shadow: none; }
 .num { color: var(--cyan); }
 .row:hover .num { text-shadow: 0 0 8px var(--cyan); }
 tr.blocked { opacity: .5; }
+tr.draft { opacity: .6; }
 .enter tbody tr { animation: rise .35s ease-out backwards; animation-delay: calc(var(--i, 0) * 35ms); }
 /* sideways, as a downward offset would briefly overflow the scrolling table box */
 @keyframes rise { from { opacity: 0; transform: translateX(-8px); } }
