@@ -48,6 +48,9 @@ h1 { font-size: 1.1rem; font-weight: 700; margin: 0 0 1.5rem; letter-spacing: .0
 @keyframes blink { 50% { opacity: 0; } }
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .75rem; }
+/* labels wrap to different line counts, so pin the numbers to the bottom */
+.tiles .tile { display: flex; flex-direction: column; }
+.tiles .big { margin-top: auto; padding-top: .4rem; }
 .tile {
     font: inherit; color: inherit; text-align: left; cursor: pointer; padding: .9rem;
     background: var(--panel);
