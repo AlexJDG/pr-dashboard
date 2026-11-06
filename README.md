@@ -41,7 +41,7 @@ Some tabs assume a particular workflow:
 
 ## API budget
 
-Each 15 second refresh costs about 7 GraphQL points, and stats (refreshed every 5 minutes, or straight after a merge) about 12. GitHub allows 5,000 an hour, shared with everything else using your `gh` login; the dashboard pauses until the reset if fewer than 500 remain.
+Each 15 second refresh costs about 8 GraphQL points, and stats (refreshed every 5 minutes, or straight after a merge) about 12. GitHub allows 5,000 an hour, shared with everything else using your `gh` login; the dashboard pauses until the reset if fewer than 500 remain.
 
 ## Layout
 

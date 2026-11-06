@@ -44,24 +44,28 @@ const KODIAK_APP_ID = 29196;
 const RECENT_MERGES_LIMIT = 10;
 // First 100 open PRs only; paginate if the repo ever has more
 const QUERY = `
-query($q: String!, $mergedQ: String!) {
+fragment OpenPr on PullRequest {
+  number title url createdAt updatedAt additions deletions mergeable reviewDecision author { login }
+  reviewThreads(first: 100) { nodes { isResolved } }
+  latestOpinionatedReviews(first: 10) { nodes { state author { login } } }
+  reviewRequests(first: 10) { nodes { requestedReviewer { ... on User { login } } } }
+  labels(first: 10) { nodes { name color } }
+  commits(last: 1) { nodes { commit {
+    statusCheckRollup { state }
+    checkSuites(first: 1, filterBy: {appId: ${KODIAK_APP_ID}}) { nodes { checkRuns(last: 1) { nodes { title } } } }
+  } } }
+}
+query($q: String!, $mergedQ: String!, $draftsQ: String!) {
   rateLimit { cost limit remaining resetAt }
   viewer { login }
   merged: search(query: $mergedQ, type: ISSUE, first: ${RECENT_MERGES_LIMIT}) {
     nodes { ... on PullRequest { number title url mergedAt } }
   }
   search(query: $q, type: ISSUE, first: 100) {
-    nodes { ... on PullRequest {
-      number title url createdAt updatedAt additions deletions mergeable reviewDecision author { login }
-      reviewThreads(first: 100) { nodes { isResolved } }
-      latestOpinionatedReviews(first: 10) { nodes { state author { login } } }
-      reviewRequests(first: 10) { nodes { requestedReviewer { ... on User { login } } } }
-      labels(first: 10) { nodes { name color } }
-      commits(last: 1) { nodes { commit {
-        statusCheckRollup { state }
-        checkSuites(first: 1, filterBy: {appId: ${KODIAK_APP_ID}}) { nodes { checkRuns(last: 1) { nodes { title } } } }
-      } } }
-    } }
+    nodes { ...OpenPr }
+  }
+  drafts: search(query: $draftsQ, type: ISSUE, first: 20) {
+    nodes { ...OpenPr }
   }
 }`;
 
@@ -98,6 +102,8 @@ const QUEUE = `${BASE} label:automerge -label:stacked`;
 const MIN_RATE_REMAINING = 500;
 const GHOST_LOGIN = "ghost";
 const NO_KODIAK_STATUS = "no Kodiak status";
+// Shown on drafts in My PRs, which aren't otherwise marked
+const DRAFT_LABEL: Label = { name: "draft", color: "6e7681" };
 
 type RawPr = {
     number: number;
@@ -128,6 +134,7 @@ type OpenPrsResult = {
     rateLimit: RateInfo;
     viewer: { login: string };
     search: { nodes: RawPr[] };
+    drafts: { nodes: RawPr[] };
     merged: { nodes: (MergedPr | null)[] };
 };
 
@@ -242,6 +249,7 @@ const openPrs = async () => {
     const variables = {
         q: `repo:${REPO} is:pr ${BASE}`,
         mergedQ: `repo:${REPO} is:pr is:merged merged:>=${searchTimestamp(midnight)} sort:updated-desc`,
+        draftsQ: `repo:${REPO} is:pr is:open draft:true author:@me sort:updated-desc`,
     };
     // GitHub search intermittently answers with nothing, so a sudden drop to no open PRs is retried before it's
     // believed; once believed, later empty answers aren't retried, so a quiet repo doesn't pay for retries
@@ -252,6 +260,10 @@ const openPrs = async () => {
     lastOpenCount = result.search.nodes.length;
     return {
         prs: result.search.nodes.filter(isPullRequest).map(toPr),
+        drafts: result.drafts.nodes.filter(isPullRequest).map((raw) => {
+            const pr = toPr(raw);
+            return { ...pr, labels: [DRAFT_LABEL, ...pr.labels] };
+        }),
         merges: result.merged.nodes.filter(isMergedPr),
         rate: result.rateLimit,
         me: result.viewer.login,
@@ -450,6 +462,7 @@ let error = "";
 let nextFetch = 0;
 let rate: RateInfo | null = null;
 let viewer = "";
+let myDrafts: Pr[] = [];
 let recentMerges: MergedPr[] = [];
 let stats: Stats | null = null;
 let statsError = "";
@@ -518,6 +531,7 @@ const refreshFromGithub = async () => {
     }
     viewer = result.me;
     recentMerges = result.merges;
+    myDrafts = result.drafts;
     categorised = categorise(result.prs, result.me);
 };
 
@@ -544,7 +558,7 @@ const buildTabs = (): Tab[] => {
         const blocked = key === "queue" ? prs.filter(isBlocked).length : 0;
         return { key, label, search, prs: prs.map(toRow), count: prs.length - blocked, blocked };
     };
-    const mine = open.filter((pr) => pr.author === viewer);
+    const mine = [...open.filter((pr) => pr.author === viewer), ...myDrafts];
     return [
         tab("queue", "In merge queue", automerge, QUEUE),
         tab("open", "Non-draft", open, BASE),
@@ -552,7 +566,7 @@ const buildTabs = (): Tab[] => {
         tab("conflicts", "Merge conflicts", conflicts, null),
         tab("review", "Awaiting review", needsReview, NEEDS_REVIEW),
         tab("other", "Other", open.filter((pr) => !accountedFor.has(pr.number)), null),
-        ...(mine.length ? [tab("mine", "My PRs", mine, `${BASE} author:@me`)] : []),
+        ...(mine.length ? [tab("mine", "My PRs", mine, "is:open author:@me")] : []),
     ];
 };
 
