@@ -304,6 +304,8 @@ details table { margin-top: .5rem; }
 
 /* FX off in the fx menu: the canvases stop redrawing (bg.ts) and the continuous animations hold still */
 :root.fx-off .beam { display: none; }
+/* repaints once per slice rather than every frame; the loading spinner keeps its smooth spin */
+:root.fx-off body:not(.loading) .pie { animation-timing-function: steps(24, jump-start); }
 :root.fx-off .bg::before, :root.fx-off .bg::after, :root.fx-off .bar::after, :root.fx-off .chart-layer, :root.fx-off .flow, :root.fx-off .cursor {
     animation-play-state: paused;
 }
